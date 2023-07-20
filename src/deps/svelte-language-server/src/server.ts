@@ -1,3 +1,5 @@
+import "./../../../preshim";
+import "./../../../fs";
 import ts from "typescript";
 import {
 	ApplyWorkspaceEditParams,
@@ -24,21 +26,17 @@ import {
 	SemanticTokensRefreshRequest,
 	InlayHintRefreshRequest,
 	DidChangeWatchedFilesNotification,
-} from "vscode-languageserver/browser";
+} from "vscode-languageserver//browser";
 import {
 	BrowserMessageReader as IPCMessageReader,
 	BrowserMessageWriter as IPCMessageWriter,
 	createConnection,
-} from "vscode-languageserver/browser";
-
-import { DiagnosticsManager } from "./deps/svelte-language-server/src/lib/DiagnosticsManager";
-import {
-	Document,
-	DocumentManager,
-} from "./deps/svelte-language-server/src/lib/documents";
-import { getSemanticTokenLegends } from "./deps/svelte-language-server/src/lib/semanticToken/semanticTokenLegend";
-import { Logger } from "./deps/svelte-language-server/src/logger";
-import { LSConfigManager } from "./deps/svelte-language-server/src/ls-config";
+} from "vscode-languageserver/node";
+import { DiagnosticsManager } from "./lib/DiagnosticsManager";
+import { Document, DocumentManager } from "./lib/documents";
+import { getSemanticTokenLegends } from "./lib/semanticToken/semanticTokenLegend";
+import { Logger } from "./logger";
+import { LSConfigManager } from "./ls-config";
 import {
 	AppCompletionItem,
 	CSSPlugin,
@@ -48,35 +46,21 @@ import {
 	TypeScriptPlugin,
 	OnWatchFileChangesPara,
 	LSAndTSDocResolver,
-} from "./deps/svelte-language-server/src/plugins";
+} from "./plugins";
 import {
 	debounceThrottle,
 	isNotNullOrUndefined,
 	normalizeUri,
 	urlToPath,
-} from "./deps/svelte-language-server/src/utils";
-import { FallbackWatcher } from "./deps/svelte-language-server/src/lib/FallbackWatcher";
-import { configLoader } from "./deps/svelte-language-server/src/lib/documents/configLoader";
-import { setIsTrusted } from "./deps/svelte-language-server/src/importPackage";
-import { SORT_IMPORT_CODE_ACTION_KIND } from "./deps/svelte-language-server/src/plugins/typescript/features/CodeActionsProvider";
-import { createLanguageServices } from "./deps/svelte-language-server/src/plugins/css/service";
-import { FileSystemProvider } from "./deps/svelte-language-server/src/plugins/css/FileSystemProvider";
-import { VFS } from "./vfs";
+} from "./utils";
+import { FallbackWatcher } from "./lib/FallbackWatcher";
+import { configLoader } from "./lib/documents/configLoader";
+import { setIsTrusted } from "./importPackage";
+import { SORT_IMPORT_CODE_ACTION_KIND } from "./plugins/typescript/features/CodeActionsProvider";
+import { createLanguageServices } from "./plugins/css/service";
+import { FileSystemProvider } from "./plugins/css/FileSystemProvider";
 import { marked } from "marked";
-import { markedHighlight } from "marked-highlight";
-import hljs from "highlight.js";
-
-import { languages } from "prismjs/components";
-marked.use({
-	extensions: markedHighlight({
-		highlight: (input) => (
-			console.log(input), hljs.highlight(input, { language: "svelte" }).value
-		),
-	}).extensions,
-	gfm: true,
-	breaks: true,
-});
-const ctime = Date.now();
+import { VFS } from "../../../vfs";
 
 namespace TagCloseRequest {
 	export const type: RequestType<
@@ -144,7 +128,10 @@ export function startServer(options?: LSOptions) {
 			Logger.error("No workspace path set");
 		}
 
-		if (!evt.capabilities.workspace?.didChangeWatchedFiles) {
+		if (
+			import.meta.env.DEV === false &&
+			!evt.capabilities.workspace?.didChangeWatchedFiles
+		) {
 			const workspacePaths = workspaceUris
 				.map(urlToPath)
 				.filter(isNotNullOrUndefined);
@@ -156,7 +143,7 @@ export function startServer(options?: LSOptions) {
 		const isTrusted: boolean = evt.initializationOptions?.isTrusted ?? true;
 		configLoader.setDisabled(!isTrusted);
 		setIsTrusted(isTrusted);
-		configManager.updateIsTrusted(true);
+		configManager.updateIsTrusted(isTrusted);
 		if (!isTrusted) {
 			Logger.log(
 				"Workspace is not trusted, running with reduced capabilities.",
@@ -200,7 +187,6 @@ export function startServer(options?: LSOptions) {
 		configManager.updateScssConfig(
 			evt.initializationOptions?.configuration?.scss,
 		);
-		console.log(evt);
 		configManager.updateLessConfig(
 			evt.initializationOptions?.configuration?.less,
 		);
@@ -210,10 +196,11 @@ export function startServer(options?: LSOptions) {
 		configManager.updateClientCapabilities(evt.capabilities);
 
 		pluginHost.initialize({
-			filterIncompleteCompletions: true,
-			definitionLinkSupport: true,
+			filterIncompleteCompletions:
+				!evt.initializationOptions?.dontFilterIncompleteCompletions,
+			definitionLinkSupport:
+				!!evt.capabilities.textDocument?.definition?.linkSupport,
 		});
-		console.log(configManager);
 		// Order of plugin registration matters for FirstNonNull, which affects for example hover info
 		pluginHost.register((sveltePlugin = new SveltePlugin(configManager)));
 		pluginHost.register(new HTMLPlugin(docManager, configManager));
@@ -223,7 +210,7 @@ export function startServer(options?: LSOptions) {
 			fileSystemProvider: new FileSystemProvider(),
 		});
 		const workspaceFolders = evt.workspaceFolders ?? [
-			{ name: "", uri: evt.rootUri ?? "/" },
+			{ name: "", uri: evt.rootUri ?? "" },
 		];
 		pluginHost.register(
 			new CSSPlugin(
@@ -261,16 +248,14 @@ export function startServer(options?: LSOptions) {
 
 		return {
 			capabilities: {
-				// foldingRangeProvider: true,
-				// documentOnTypeFormattingProvider: true,
 				textDocumentSync: {
 					openClose: true,
-					change: TextDocumentSyncKind.Full,
+					change: TextDocumentSyncKind.Incremental,
 					save: {
 						includeText: false,
 					},
 				},
-				// diagnosticProvider: {},
+				diagnosticProvider: true,
 				hoverProvider: true,
 				completionProvider: {
 					resolveProvider: true,
@@ -419,11 +404,10 @@ export function startServer(options?: LSOptions) {
 	});
 
 	connection.onDidOpenTextDocument((evt) => {
-		console.log({ uri: evt.textDocument.uri });
-		VFS.writeFile(evt.textDocument.uri, evt.textDocument.text);
 		const document = docManager.openDocument(evt.textDocument);
 		docManager.markAsOpenedInClient(evt.textDocument.uri);
-		diagnosticsManager.scheduleUpdate(document);
+		console.log({ sys: ts.sys });
+		setTimeout(() => diagnosticsManager.scheduleUpdate(document), 0);
 		// console.log;
 	});
 
@@ -434,15 +418,14 @@ export function startServer(options?: LSOptions) {
 		docManager.updateDocument(evt.textDocument, evt.contentChanges);
 		VFS.writeFile(
 			evt.textDocument.uri,
-			docManager.get(evt.textDocument.uri).getText(),
+			evt.contentChanges.reduce((acc, curr) => (acc += curr.text), ""),
 		);
-
 		pluginHost.didUpdateDocument();
 	});
 	connection.onHover(async (evt) => {
-		const doc = docManager.get(evt.textDocument.uri);
-		docManager.openDocument({ uri: doc.uri, text: doc.getText() });
 		const result = await pluginHost.doHover(evt.textDocument, evt.position);
+		console.log({ sys: ts.sys });
+
 		// console.log(result);
 		if (!result) return null;
 		if (Array.isArray(result.contents)) {

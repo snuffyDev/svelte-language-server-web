@@ -2,6 +2,7 @@ import { defineConfig, Plugin as VitePlugin } from "vite";
 import { Plugin, PluginBuild } from "esbuild";
 import dts from "vite-plugin-dts";
 import { readdirSync, readFileSync } from "fs";
+import glob from "fast-glob";
 import * as path from "path";
 import { readFile } from "fs/promises";
 import { createRequire } from "module";
@@ -35,7 +36,17 @@ const moduleShimmer: Plugin = {
 		function escapeRegex(string) {
 			return string.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
 		}
-
+		build.onLoad({ filter: /chokidar\/lib\/constants\.js/ }, (args) => {
+			const contents = readFileSync(args.path, { encoding: "utf-8" }).replace(
+				"os.type()",
+				"null",
+			);
+			return {
+				contents,
+				loader: "ts",
+				resolveDir: path.resolve("/node_modules/chokidar/lib/constants.js"),
+			};
+		});
 		const moduleShims = Object.fromEntries(
 			readdirSync(path.resolve(__dirname, "module_shims")).map((filename) => [
 				filename.replace(".ts", ""),
@@ -51,6 +62,24 @@ const moduleShimmer: Plugin = {
 				.toString()
 				.replace(/require\(\"/g, 'rekuire("');
 			return { contents };
+		});
+
+		build.onResolve({ filter: /^typescript$/ }, async (_args) => {
+			console.log("TS", _args.importer);
+			if (
+				_args.importer.includes("typescript.ts") ||
+				_args.importer.includes("@typescript/vfs")
+			)
+				return {
+					path: path.resolve(
+						__dirname,
+						"node_modules/typescript/lib/typescript.js",
+					),
+				};
+
+			return {
+				path: path.resolve(__dirname, "module_shims/typescript.ts"),
+			};
 		});
 
 		// w/o this webCustomData.js included twice - as umd and as esm
@@ -76,20 +105,24 @@ const moduleShimmer: Plugin = {
 		}
 
 		build.onLoad(
-			{ filter: /\/typescript\/lib\/typescript\.js/ },
+			{
+				filter: /\/svelte-preprocess\/dist\/autoPreprocess\.js/,
+			},
 			async (args) => {
-				const contents = await (
-					await readFile(
-						path.resolve(
-							__dirname,
-							"node_modules/typescript/lib/typescript.js",
-						),
-					).then((x) => x.toString())
-				).replace(" debugger;", "");
+				const contents = await await readFile(
+					path.resolve(
+						__dirname,
+						"node_modules/svelte-preprocess/dist/autoProcess.js",
+					),
+				).then((x) => x.toString());
+				// .replace("synchronizeHostData()", "if (false)");
 				return {
 					contents,
 					loader: "ts",
-					resolveDir: path.resolve(__dirname, "node_modules/typescript/lib/"),
+					resolveDir: path.resolve(
+						__dirname,
+						"node_modules/svelte-preprocess/dist/",
+					),
 				};
 			},
 		);
@@ -136,11 +169,7 @@ export default defineConfig({
 			{
 				find: /vscode.html.languageservice.lib.umd.*webCustomData/,
 				replacement:
-					"vscode-html-languageservice/lib/esm/languageFacts/data/webCustomData",
-			},
-			{
-				find: /vscode.html.languageservice/,
-				replacement: "vscode-html-languageservice/lib/esm/htmlLanguageService",
+					"vscode-html-languageservice/lib/esm/languageFacts/data/webCustomData.js",
 			},
 			{
 				find: "events",
@@ -213,9 +242,9 @@ export default defineConfig({
 		minifySyntax: true,
 
 		define: {
-			global: "self",
+			global: "globalThis",
 			__dirname: '""',
-			_self: "self",
+			_self: "globalThis",
 			__filename: '""',
 			define: "null",
 			importScripts: "_importScripts",
@@ -223,6 +252,9 @@ export default defineConfig({
 			importSvelte: "_importSvelte",
 			importSveltePreprocess: "_importSveltePreprocess",
 			importPrettier: "_importPrettier",
+			sorcery_1: "_sorceryShim",
+			__importStar: "__importStar",
+			__importDefault: "__importDefault",
 		},
 
 		platform: "browser",
@@ -237,25 +269,25 @@ export default defineConfig({
 		esbuildOptions: {
 			plugins: [moduleShimmer],
 			define: {
-				global: "self",
+				global: "globalThis",
 				__dirname: '""',
+				_self: "globalThis",
 				__filename: '""',
-				_self: "self",
 				define: "null",
 				importScripts: "_importScripts",
 				Buffer: "_Buffer",
 				importSvelte: "_importSvelte",
 				importSveltePreprocess: "_importSveltePreprocess",
 				importPrettier: "_importPrettier",
+				sorcery_1: "_sorceryShim",
+				__importStar: "__importStar",
+				__importDefault: "__importDefault",
 			},
 		},
 		include: [
-			"svelte-language-server > readdirp",
-			"svelte-language-server > readdirp",
-			"svelte-language-server > chokidar",
-			"@typescript/vfs",
-			"process",
-			"graceful-fs",
+			...glob.sync("./src/**/*.ts", { absolute: true }),
+			"svelte",
+			"svelte-preprocess/dist/transformers/typescript.js",
 		],
 		exclude: ["svelte-language-sever > graceful-fs", "vscode-uri", "stylus"],
 	},

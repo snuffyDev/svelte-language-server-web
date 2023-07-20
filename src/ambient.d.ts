@@ -1,13 +1,3 @@
-import * as ts from "typescript";
-import pathDeno from "./deps/path-deno";
-
-declare global {
-	interface Window {
-		typescript$1: typeof ts;
-	}
-	var _self: Window;
-	namespace NodeJS {}
-}
 declare global {
 	module "@types/node" {
 		declare module "path/posix" {
@@ -203,6 +193,3 @@ declare global {
 		}
 	}
 }
-
-import p from "path";
-p.reee;

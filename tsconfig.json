@@ -1,25 +1,24 @@
 {
 	"compilerOptions": {
 		"target": "ESNext",
-		"useDefineForClassFields": true,
+		"useDefineForClassFields": false,
 		"module": "ESNext",
 		"lib": ["ES2020", "DOM", "DOM.Iterable"],
 
 		/* Bundler mode */
-		"importHelpers": false,
+		"importHelpers": true,
 		"moduleResolution": "Node",
 		"noEmitOnError": false,
 		"resolveJsonModule": true,
 		"isolatedModules": true,
-		"inlineSourceMap": false,
 		"strict": false,
-		"inlineSources": false,
+		"inlineSources": true,
 		"esModuleInterop": true,
 		"allowSyntheticDefaultImports": true,
 		/* Linting */
 		"skipLibCheck": true,
 		"skipDefaultLibCheck": true,
-		"sourceMap": false,
+		"sourceMap": true,
 		"noFallthroughCasesInSwitch": true
 	},
 	"exclude": ["node_modules/@open-rpc/client-js/src/transports/Transport.ts"],
@@ -27,6 +26,6 @@
 		"src/**/*.ts",
 		"src/**/*.d.ts",
 		"dist2/**/*.js",
-		"deps/svelte-language-server"
+		"src/deps/svelte-language-server/**/*.ts"
 	]
 }

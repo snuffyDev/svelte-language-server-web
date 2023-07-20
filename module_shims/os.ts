@@ -5,7 +5,7 @@ export function platform() {
 	return "browser";
 }
 
-export default {
+const mod = {
 	EOL,
 	platform,
 	cpus() {
@@ -15,3 +15,5 @@ export default {
 		return "";
 	},
 };
+
+export default mod;

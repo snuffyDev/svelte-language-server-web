@@ -1,8 +1,6 @@
-//@ts-nocheck
 import type * as _vfs from "@typescript/vfs";
+import _path from "./deps/path-deno";
 import ts from "typescript";
-
-const sys = self.typescript$1.sys;
 /**
  * A helper class for VFS Path Operations (writing to the TS VFS).
  *
@@ -10,42 +8,48 @@ const sys = self.typescript$1.sys;
  */
 export class VFS {
 	public static normalize(path: string) {
-		return path.replace(/^(file:)?(\/?\/?\/?)/, "/");
+		return _path.posix.fromFileUrl(
+			path.startsWith("file:///") ? path : new URL(_path.posix.toFileUrl(path)),
+		);
 	}
 
 	static write = (s: string) => {
-		return self.typescript$1.sys.write(s);
+		return ts.sys.write(s);
 	};
 	static readFile = (path: string, encoding?: string) => {
-		return sys.readFile(VFS.normalize(path), encoding);
+		return ts.sys.readFile(VFS.normalize(path), encoding);
 	};
 	static writeFile = (
 		path: string,
 		data: string,
 		writeByteOrderMark?: boolean,
 	) => {
-		return sys.writeFile(VFS.normalize(path), data, writeByteOrderMark);
+		return ts.sys.writeFile(
+			_path.posix.normalize(VFS.normalize(path)),
+			data,
+			writeByteOrderMark,
+		);
 	};
 	static resolvePath = (path: string) => {
-		return sys.resolvePath(VFS.normalize(path));
+		return ts.sys.resolvePath(VFS.normalize(path));
 	};
 	static fileExists = (path: string) => {
-		return sys.fileExists(VFS.normalize(path));
+		return ts.sys.fileExists(VFS.normalize(path));
 	};
 	static directoryExists = (path: string) => {
-		return sys.directoryExists(path);
+		return ts.sys.directoryExists(path);
 	};
 	static createDirectory = (path: string) => {
-		return sys.createDirectory(path);
+		return ts.sys.createDirectory(path);
 	};
 	static getExecutingFilePath = () => {
-		return sys.getExecutingFilePath();
+		return ts.sys.getExecutingFilePath();
 	};
 	static getCurrentDirectory = () => {
-		return sys.getCurrentDirectory();
+		return ts.sys.getCurrentDirectory();
 	};
 	static getDirectories = (path: string) => {
-		return sys.getDirectories(path);
+		return ts.sys.getDirectories(path);
 	};
 
 	static readDirectory = (
@@ -55,11 +59,16 @@ export class VFS {
 		include?: readonly string[],
 		depth?: number,
 	) => {
-		return sys
-			.readDirectory(path ?? "/", extensions, exclude, include, depth)
-			.map(VFS.normalize);
+		return (() => {
+			console.log(path);
+			const test = ts.sys
+				.readDirectory(path, extensions, exclude, include, depth)
+				.map((v) => _path.posix.toFileUrl(VFS.normalize(v)).pathname);
+			console.log(test);
+			return test;
+		})();
 	};
 	static exit = (exitCode?: number) => {
-		return sys.exit(exitCode);
+		return ts.sys.exit(exitCode);
 	};
 }

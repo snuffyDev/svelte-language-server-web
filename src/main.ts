@@ -1,6 +1,5 @@
 import { basicSetup } from "codemirror";
 import "./style.css";
-import "./fs";
 import { EditorView, hoverTooltip, keymap } from "@codemirror/view";
 import { syntaxHighlighting } from "@codemirror/language";
 import { Annotation, EditorState, Text, Transaction } from "@codemirror/state";
@@ -135,7 +134,7 @@ console.log(svelteWorker);
 const DEFAULT_OPTIONS = {};
 const STATES = new Map<`file:///${keyof typeof files}`, EditorView>();
 
-let code = "";
+let code = files["App.svelte"];
 const watcher = EditorView.updateListener.of((viewUpdate) => {
 	if (viewUpdate.selectionSet) {
 		code = viewUpdate.state.doc.toString();
@@ -146,10 +145,10 @@ const watcher = EditorView.updateListener.of((viewUpdate) => {
 
 const ls = new LanguageServerClient({
 	transport,
-	rootUri: "file:///",
-	documentUri: "file:///",
-	languageId: "svelte",
-	workspaceFolders: null,
+	rootUri: "/",
+	documentUri: "/",
+	languageId: "",
+	workspaceFolders: [{ name: "root", uri: "/" }],
 });
 
 // const state = EditorState.create({
@@ -190,8 +189,8 @@ const createEditorState = (uri: string) =>
 				transport,
 				documentUri: uri,
 				languageId: uri.includes("svelte") ? "svelte" : "typescript",
-				workspaceFolders: [{ name: "svelte", uri: "file:///" }],
-				rootUri: "file:///",
+				workspaceFolders: [{ name: "root", uri: "/" }],
+				rootUri: "/",
 				allowHTMLContent: true,
 				autoClose: false,
 				client: ls,
@@ -273,4 +272,4 @@ function syncDispatch() {
 	}
 }
 
-editor.dispatch({ changes: { from: 0, insert: code } });
+editor.dispatch({ changes: { to: 0, from: 0, insert: code } });

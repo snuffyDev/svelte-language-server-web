@@ -7,6 +7,7 @@ import {
 	readdir as _readdir,
 	Dirent,
 	stat as _stat,
+	statSync as _statSync,
 	realpathSync as _realpathSync,
 } from "node:fs";
 import { Buffer as _Buffer } from "buffer";
@@ -129,17 +130,19 @@ readFile.__promisify__ = promisify(readFile);
 // });
 
 let existsSync: typeof _existsSync = (...args) => {
-	return false;
+	return true;
 };
-let stat: typeof _stat = (...args) => {
-	return () => ({});
+let stat: typeof _stat = (path, options, callback) => {
+	callback(null, {});
 };
-let statSync: typeof _stat = (...args) => {
-	return () => ({});
+let statSync: typeof _statSync = (path, options) => {
+	return {};
 };
 
+const S = Symbol.for("graceful-fs.queue");
 stat.__promisify__ = promisify(stat);
 let mod = {
+	[S]: () => {},
 	existsSync,
 	stat,
 	readdir,
@@ -154,11 +157,14 @@ let mod = {
 
 for (const key in mod) {
 	Object.defineProperty(mod, key, {
-		writable: true,
-		configurable: true,
+		set(v) {
+			mod[key] = v;
+		},
 		enumerable: true,
-		value: mod[key],
+		configurable: true,
 	});
 }
 
-export default mod;
+export default (() => {
+	return mod;
+})();
