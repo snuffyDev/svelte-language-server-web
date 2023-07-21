@@ -3,29 +3,27 @@
 		"target": "ESNext",
 		"useDefineForClassFields": false,
 		"module": "ESNext",
-		"lib": ["ES2020", "DOM", "DOM.Iterable"],
+		"lib": ["ES2020", "DOM", "WebWorker", "Webworker.Iterable", "DOM.Iterable"],
 
 		/* Bundler mode */
 		"importHelpers": true,
 		"moduleResolution": "Node",
 		"noEmitOnError": false,
 		"resolveJsonModule": true,
-		"isolatedModules": true,
 		"strict": false,
-		"inlineSources": true,
-		"esModuleInterop": true,
+		"emitDeclarationOnly": true,
+		"inlineSources": false,
+		"noEmit": false,
+		"noResolve": false,
+		"declarationDir": "./dist",
+		"declaration": true,
+
+		"skipDefaultLibCheck": true,
 		"allowSyntheticDefaultImports": true,
 		/* Linting */
-		"skipLibCheck": true,
-		"skipDefaultLibCheck": true,
-		"sourceMap": true,
+		"sourceMap": false,
 		"noFallthroughCasesInSwitch": true
 	},
 	"exclude": ["node_modules/@open-rpc/client-js/src/transports/Transport.ts"],
-	"include": [
-		"src/**/*.ts",
-		"src/**/*.d.ts",
-		"dist2/**/*.js",
-		"src/deps/svelte-language-server/**/*.ts"
-	]
+	"include": ["src/main.ts", "src/**/*.d.ts", "vite-env.d.ts"]
 }

@@ -1,6 +1,6 @@
 import { Logger } from "../../logger.js";
-import "./../../../../../preshim";
-import "./../../../../../fs";
+import "../../../../../prelude.js";
+import "../../../../../global_patches.js";
 // import './../../../../../'
 import { CompileOptions } from "svelte/types/compiler/interfaces";
 import { PreprocessorGroup } from "svelte/types/compiler/preprocess";

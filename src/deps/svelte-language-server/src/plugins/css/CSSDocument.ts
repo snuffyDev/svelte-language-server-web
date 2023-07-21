@@ -1,5 +1,5 @@
 import { Stylesheet, TextDocument } from "vscode-css-languageservice";
-import { Position } from "vscode-languageserver";
+import { Position } from "vscode-languageserver/browser";
 import {
 	Document,
 	DocumentMapper,

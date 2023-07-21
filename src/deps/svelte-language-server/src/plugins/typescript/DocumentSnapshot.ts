@@ -12,7 +12,7 @@ import {
 	Position,
 	Range,
 	TextDocumentContentChangeEvent,
-} from "vscode-languageserver";
+} from "vscode-languageserver/browser";
 import {
 	Document,
 	DocumentMapper,

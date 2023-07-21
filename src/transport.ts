@@ -1,4 +1,3 @@
-//@ts-nocheck -- the imports are straight up .ts files, TS will complain
 // https://gitlab.com/aedge/codemirror-web-workers-lsp-demo/-/blob/master/src/App.svelte
 import { Transport } from "@open-rpc/client-js/build/transports/Transport";
 import { getNotifications } from "@open-rpc/client-js/build/Request";
@@ -8,7 +7,7 @@ import type {
 } from "@open-rpc/client-js/src/Request";
 
 export default class PostMessageWorkerTransport extends Transport {
-	public worker: undefined | null | MessagePort;
+	public worker: undefined | null | Worker;
 	public postMessageID: string;
 
 	constructor(worker: Worker) {

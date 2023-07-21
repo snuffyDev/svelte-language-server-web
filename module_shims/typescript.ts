@@ -1,4 +1,4 @@
-import * as typescript from "typescript/lib/typescript.js";
+import typescript = require("typescript/lib/typescript");
 const { createLanguageService } = typescript;
 import {
 	createSystem,
@@ -24,10 +24,13 @@ let ts = {
 
 		return typescript.createLanguageService.bind(this)(host, reg, mode);
 	},
+	getDefaultLibFilePath() {
+		return "node_modules/typescript/lib/";
+	},
 	sys, // ...langService,
 } as Partial<typeof typescript>;
 
-const proxy = new Proxy(ts, {
+const proxy = new Proxy(typescript, {
 	get(target, p, receiver) {
 		// console.log({ receiver });
 		if (p === "default") return receiver;
@@ -37,7 +40,7 @@ const proxy = new Proxy(ts, {
 		return ts[p] ? ts[p] : target[p];
 	},
 	set(target, p, value, receiver) {
-		if (p === "sys") return true;
+		// if (p === "sys") return ;
 		return Reflect.set(!ts[p] ? ts : target, p, value);
 	},
 });

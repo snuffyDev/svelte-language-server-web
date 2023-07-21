@@ -1,6 +1,6 @@
 import { dirname } from "path";
 import ts from "typescript";
-import { TextDocumentContentChangeEvent } from "vscode-languageserver";
+import { TextDocumentContentChangeEvent } from "vscode-languageserver/browser";
 import { Document, DocumentManager } from "../../lib/documents";
 import { LSConfigManager } from "../../ls-config";
 import {

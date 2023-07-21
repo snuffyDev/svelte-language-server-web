@@ -1,5 +1,9 @@
 import type ts from "typescript";
-import { Location, Position, ReferenceContext } from "vscode-languageserver";
+import {
+	Location,
+	Position,
+	ReferenceContext,
+} from "vscode-languageserver/browser";
 import { Document } from "../../../lib/documents";
 import { flatten, isNotNullOrUndefined } from "../../../utils";
 import { FindReferencesProvider } from "../../interfaces";

@@ -1,13 +1,12 @@
-//@ts-nocheck
-import "./preshim";
-import "./fs";
+import "./prelude";
+import "./global_patches";
 import {
 	BrowserMessageReader,
 	BrowserMessageWriter,
 	createConnection,
-} from "vscode-languageserver//browser";
+} from "vscode-languageserver/browser";
 
-const worker: Worker = _self as any;
+const worker = globalThis as unknown as WindowOrWorkerGlobalScope;
 
 const conn = createConnection(
 	new BrowserMessageReader(worker),
@@ -19,9 +18,11 @@ import { startServer } from "./deps/svelte-language-server/src/server";
 addEventListener("messageerror", (e) => console.error(e));
 addEventListener("error", (e) => console.error(e));
 
-// Start the
-try {
-	startServer({ connection: conn });
-} catch (e) {
-	console.log({ eRROR: e });
-}
+// Start the language server
+export default () => {
+	try {
+		startServer({ connection: conn });
+	} catch (e) {
+		console.log({ eRROR: e });
+	}
+};

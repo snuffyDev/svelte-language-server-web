@@ -1,6 +1,6 @@
 import { isEqual, uniqWith } from "lodash-es";
 import { Node } from "vscode-html-languageservice";
-import { Position, Range } from "vscode-languageserver";
+import { Position, Range } from "vscode-languageserver/browser";
 import { URI } from "vscode-uri";
 
 type Predicate<T> = (x: T) => boolean;
@@ -28,7 +28,7 @@ export function clamp(num: number, min: number, max: number): number {
 export function urlToPath(stringUrl: string): string | null {
 	const url = URI.parse(stringUrl);
 	// if (url.scheme !== "file") {
-		// return null;
+	// return null;
 	// }
 	return url.fsPath.replace(/\\/g, "/");
 }

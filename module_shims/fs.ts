@@ -1,8 +1,6 @@
 //@ts-ignore
-import ts from "typescript";
+import { resolve } from "../src/deps/path-deno";
 import { VFS } from "../src/vfs";
-
-const vfs = new VFS(ts);
 
 interface ReadOptions {
 	encoding?: Encoding;
@@ -29,7 +27,7 @@ function readFile(
 			typeof options === "string" ? options : options.encoding || "utf8";
 
 		try {
-			const data = vfs.readFile(normalizedPath, encoding);
+			const data = VFS.readFile(normalizedPath, encoding);
 			resolve(data);
 		} catch (error) {
 			reject(error);
@@ -129,7 +127,7 @@ function writeFile(
 		const writeByteOrderMark = options.flag === "w" && options.mode === 0xfeff;
 
 		try {
-			vfs.writeFile(
+			VFS.writeFile(
 				normalizedPath,
 				data.toString(encoding),
 				writeByteOrderMark,
@@ -143,12 +141,12 @@ function writeFile(
 
 function existsSync(path: string | Buffer | URL): boolean {
 	const normalizedPath = normalizePath(path.toString());
-	return vfs.fileExists(normalizedPath);
+	return VFS.fileExists(normalizedPath);
 }
 
 function mkdirSync(path: string | Buffer | URL, mode?: number): void {
 	const normalizedPath = normalizePath(path.toString());
-	vfs.createDirectory(normalizedPath);
+	VFS.createDirectory(normalizedPath);
 }
 
 function statSync(
@@ -156,7 +154,7 @@ function statSync(
 	options: StatsOptions = {},
 ): Stats {
 	const normalizedPath = normalizePath(path.toString());
-	const exists = vfs.fileExists(normalizedPath);
+	const exists = VFS.fileExists(normalizedPath);
 
 	return {
 		isFile: () => exists,
@@ -200,7 +198,7 @@ function readFileSync(
 	const normalizedPath = normalizePath(path.toString());
 	const encoding = typeof options === "string" ? options : options || "utf8";
 
-	return vfs.readFile(normalizedPath, encoding);
+	return VFS.readFile(normalizedPath, encoding);
 }
 
 function writeFileSync(
@@ -212,17 +210,17 @@ function writeFileSync(
 	const encoding = options.encoding || "utf8";
 	const writeByteOrderMark = options.flag === "w" && options.mode === 0xfeff;
 
-	vfs.writeFile(normalizedPath, data.toString(encoding), writeByteOrderMark);
+	VFS.writeFile(normalizedPath, data.toString(encoding), writeByteOrderMark);
 }
 
 function readdirSyncWithFileTypes(path: string | Buffer | URL): Dirent[] {
 	const normalizedPath = normalizePath(path.toString());
-	const files = vfs.readDirectory(normalizedPath);
+	const files = VFS.readDirectory(normalizedPath);
 
 	return files.map((file) => ({
 		name: file,
-		isFile: () => vfs.fileExists(file),
-		isDirectory: () => !vfs.fileExists(file),
+		isFile: () => VFS.fileExists(file),
+		isDirectory: () => !VFS.fileExists(file),
 	}));
 }
 
@@ -246,12 +244,12 @@ interface StatsOptions {
 }
 
 function normalizePath(path: string): string {
-	return vfs.normalize(path);
+	return VFS.normalize(path);
 }
 
 function accessSync(path: string | Buffer | URL, mode?: number): void {
 	const normalizedPath = normalizePath(path.toString());
-	if (!vfs.fileExists(normalizedPath)) {
+	if (!VFS.fileExists(normalizedPath)) {
 		const err = new Error(`File does not exist: ${normalizedPath}`);
 		console.error(err);
 		throw err;
@@ -310,7 +308,7 @@ function rmdirSync(path: string | Buffer | URL): void {
 
 function lstatSync(path: string | Buffer | URL): Stats {
 	const normalizedPath = normalizePath(path.toString());
-	const exists = vfs.fileExists(normalizedPath);
+	const exists = VFS.fileExists(normalizedPath);
 
 	return {
 		isFile: () => exists,
@@ -389,7 +387,7 @@ function readdir(path: string | Buffer | URL): Promise<string[]> {
 		const normalizedPath = normalizePath(path.toString());
 
 		try {
-			const files = vfs.readDirectory(normalizedPath);
+			const files = VFS.readDirectory(normalizedPath);
 			resolve(files);
 		} catch (error) {
 			reject(error);
@@ -399,7 +397,7 @@ function readdir(path: string | Buffer | URL): Promise<string[]> {
 
 function readdirSync(path: string | Buffer | URL): string[] {
 	const normalizedPath = normalizePath(path.toString());
-	return vfs.readDirectory(normalizedPath);
+	return VFS.readDirectory(normalizedPath);
 }
 
 function realpathSync(path: string | Buffer | URL): string {
@@ -463,7 +461,17 @@ const rw = {
 	readSync,
 	writeFileSync,
 	readdirSyncWithFileTypes,
+	realpath: realpathSync,
 };
+
+rw.realpath.native = (path, options, callback) => {
+	if (!callback) options(null, resolve(path));
+	else if (callback) callback(null, resolve(path));
+};
+rw.realpathSync.native = (path, options) => {
+	return resolve(path);
+};
+
 // export * from "../fsImpl";
 
 const proxy = new Proxy(

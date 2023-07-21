@@ -6,7 +6,7 @@ import {
 	DidChangeWatchedFilesParams,
 	FileChangeType,
 	FileEvent,
-} from "vscode-languageserver";
+} from "vscode-languageserver/browser";
 import { pathToUrl } from "../utils";
 
 type DidChangeHandler = (para: DidChangeWatchedFilesParams) => void;

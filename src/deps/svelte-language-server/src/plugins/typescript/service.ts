@@ -268,7 +268,7 @@ async function createLanguageService(
 	const host: ts.LanguageServiceHost = {
 		log: (message) => Logger.debug(`[ts] ${message}`),
 		getCompilationSettings: () => compilerOptions,
-		getDefaultLibFileName: ts.getDefaultLibFilePath,
+		getDefaultLibFileName: () => "/node_modules/typescript/lib",
 		getDirectories: tsSystem.getDirectories,
 		useCaseSensitiveFileNames: () => tsSystem.useCaseSensitiveFileNames,
 		getNewLine: () => tsSystem.newLine,

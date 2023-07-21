@@ -1,6 +1,6 @@
-import "./../../../preshim";
-import "./../../../fs";
-import ts from "typescript";
+import "./../../../prelude";
+import "./../../../global_patches";
+import ts from "./../../../../module_shims/typescript";
 import {
 	ApplyWorkspaceEditParams,
 	ApplyWorkspaceEditRequest,
@@ -31,7 +31,7 @@ import {
 	BrowserMessageReader as IPCMessageReader,
 	BrowserMessageWriter as IPCMessageWriter,
 	createConnection,
-} from "vscode-languageserver/node";
+} from "vscode-languageserver/browser";
 import { DiagnosticsManager } from "./lib/DiagnosticsManager";
 import { Document, DocumentManager } from "./lib/documents";
 import { getSemanticTokenLegends } from "./lib/semanticToken/semanticTokenLegend";
@@ -255,7 +255,7 @@ export function startServer(options?: LSOptions) {
 						includeText: false,
 					},
 				},
-				diagnosticProvider: true,
+				diagnosticProvider: {},
 				hoverProvider: true,
 				completionProvider: {
 					resolveProvider: true,

@@ -26,7 +26,7 @@ import {
 	SymbolKind,
 	TextDocumentContentChangeEvent,
 	WorkspaceEdit,
-} from "vscode-languageserver";
+} from "vscode-languageserver/browser";
 import {
 	Document,
 	getTextInRange,

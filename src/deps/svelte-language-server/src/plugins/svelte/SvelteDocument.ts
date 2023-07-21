@@ -2,7 +2,7 @@ import { TraceMap } from "@jridgewell/trace-mapping";
 import type { compile } from "svelte/compiler";
 import { CompileOptions } from "svelte/types/compiler/interfaces";
 import { PreprocessorGroup, Processed } from "svelte/types/compiler/preprocess";
-import { Position } from "vscode-languageserver";
+import { Position } from "vscode-languageserver/browser";
 import { getPackageInfo, importSvelte } from "../../importPackage";
 import {
 	Document,
