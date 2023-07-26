@@ -14,11 +14,12 @@ import {
 	SvelteConfig,
 	setConfigLoader,
 } from "./deps/svelte-language-server/src/lib/documents/configLoader.js";
+import fs from "./../module_shims/fs";
 
 //@ts-ignore
 import ppts = require("svelte-preprocess/dist/processors/typescript.js");
 import * as transformerTS from "svelte-preprocess/dist/transformers/typescript.js";
-import * as preprocess from "svelte-preprocess/dist/autoProcess";
+import preprocess from "svelte-preprocess/dist/autoProcess";
 
 import { version as prettierVersion } from "prettier/package.json";
 import { version as preprocess_version } from "svelte-preprocess/package.json";
@@ -84,11 +85,16 @@ const compilerOptions = {
 const conf: SvelteConfig = {
 	preprocess: [
 		ppts.default({
-			tsconfigFile: "/tsconfig.json",
-			tsconfigDirectory: "/",
 			compilerOptions,
+			tsconfigDirectory: "/",
+			tsconfigFile: "/tsconfig.json",
 		}),
-	],
+	], // ppts.default({
+	// 	tsconfigFile: "/tsconfig.json",
+	// 	tsconfigDirectory: "/",
+	// 	compilerOptions,
+	// }),
+	// ],
 };
 
 setConfigLoader("getConfig", (_x) => conf);
@@ -97,8 +103,9 @@ const required = {
 	"prettier/package.json": { version: prettierVersion },
 	"svelte/package.json": { version: svelteVersion },
 	"svelte-preprocess/package.json": { version: preprocess_version },
-	"svelte-preprocess/autoProcess.js": preprocess.sveltePreprocess,
-	"svelte-preprocess": preprocess.sveltePreprocess,
+	"svelte-preprocess/autoProcess.js": preprocess,
+	"svelte-preprocess": preprocess,
+	"graceful-fs": fs,
 	typescript: ts,
 	"../transformers/typescript.js": { transformer: transformerTS.transformer },
 	"./transformers/typescript": { transformer: transformerTS.transformer },

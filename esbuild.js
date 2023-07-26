@@ -1,13 +1,12 @@
 /** @typedef {Partial<Record<`node:${import('node-stdlib-browser').PackageNames}` | `${import('node-stdlib-browser').PackageNames}`, 'empty' | undefined | boolean>>} Modules */
-import glob from "fast-glob";
 import { build, transform } from "esbuild";
 import { readFileSync, readdirSync, rmSync } from "fs";
-import { readFile } from "fs/promises";
-import { builtinModules, createRequire } from "module";
+import { readFile, writeFile } from "fs/promises";
+import { createRequire } from "module";
 import path from "path";
 import { nodeModulesPolyfillPlugin } from "esbuild-plugins-node-modules-polyfill";
 import { execSync } from "child_process";
-
+import resolve from "esbuild-plugin-resolve";
 const require = createRequire(import.meta.url);
 const moduleShimmerName = "ModuleShimmer";
 const __dirname = path.resolve(".");
@@ -47,7 +46,7 @@ const moduleShimmer = {
 		// w/o this webCustomData.js included twice - as umd and as esm
 		build.onResolve(
 			{ filter: /.*vscode-html-languageservice.*webCustomData/ },
-			(args) => {
+			() => {
 				return {
 					path: require.resolve(
 						"vscode-html-languageservice/lib/esm/languageFacts/data/webCustomData.js",
@@ -58,7 +57,7 @@ const moduleShimmer = {
 		for (const mod of Object.keys(moduleShims)) {
 			build.onResolve(
 				{ filter: new RegExp("^" + escapeRegex(mod) + "$") },
-				(args) => ({
+				() => ({
 					path: mod,
 					namespace: moduleShimmerName,
 				}),
@@ -68,12 +67,12 @@ const moduleShimmer = {
 			{
 				filter: /\/svelte-preprocess\/dist\/autoPreprocess\.js/,
 			},
-			async (args) => {
-				const contents = await await readFile(
+			async () => {
+				const contents = await readFile(
 					path.resolve(
 						__dirname,
-						"node_modules/svelte-preprocess/dist/autoProcess.js",
-					),
+						"node_modules/svelte-preprocess/dist/autoProcess.js"
+					)
 				).then((x) => x.toString());
 				// .replace("synchronizeHostData()", "if (false)");
 				return {
@@ -117,12 +116,12 @@ function createAliasPlugin(aliasConfig) {
 						format: "esm",
 						keepNames: true,
 
-						minify: false,
-						treeShaking: false,
+						minify: true,
+						treeShaking: true,
 
-						minifySyntax: false,
-						minifyIdentifiers: false,
-						minifyWhitespace: false,
+						minifySyntax: true,
+						minifyIdentifiers: true,
+						minifyWhitespace: true,
 						loader: "ts",
 					}).then((value) => value.code),
 				};
@@ -142,6 +141,10 @@ const aliases = [
 	},
 	{
 		find: /^fs$/,
+		replacement: path.resolve("./module_shims/fs.ts"),
+	},
+	{
+		find: /graceful-fs/,
 		replacement: path.resolve("./module_shims/fs.ts"),
 	},
 	{
@@ -175,14 +178,42 @@ try {
 await build({
 	plugins: [
 		nodeModulesPolyfillPlugin({
-			globals: { Buffer: true,  process: true },
+			globals: { Buffer: true, process: true },
 			/**@type {Modules} */
-			modules: {util:true,buffer:true,fs:true, net:true, os: true,'node:process': true, 'process':true},
+			modules: {
+				util: true,
+				buffer: true,
+				fs: true,
+				net: true,
+				os: true,
+				"node:process": true,
+				process: true,
+			},
 		}),
 		moduleShimmer,
 		createAliasPlugin(aliases),
+		{
+			name: "umd2esm",
+			setup(build) {
+				build.onResolve(
+					{ filter: /(vscode-.*|estree-walker|jsonc-parser)/ },
+					(args) => {
+						const pathUmdMay = require.resolve(args.path, {
+							paths: [args.resolveDir],
+						});
+						const pathEsm = pathUmdMay.replace("/umd/", "/esm/");
+						return { path: pathEsm };
+					},
+				);
+			},
+		},
+		resolve({
+			fs: path.resolve("./module_shims/"),
+			"graceful-fs": path.resolve("./module_shims"),
+		}),
+		// dtsPlugin(),
 	],
-	sourcemap: false,
+	sourcemap: true,
 	platform: "browser",
 	external: ["@codemirror/state"],
 	outdir: "./dist",
@@ -193,6 +224,7 @@ await build({
 		_self: "globalThis",
 		__filename: '""',
 		require: "require",
+		setImmediate: "queueMicrotask",
 		define: "null",
 		importScripts: "_importScripts",
 		importSvelte: "_importSvelte",
@@ -205,22 +237,33 @@ await build({
 	format: "esm",
 	bundle: true,
 	tsconfig: "./tsconfig.build.json",
-	minifySyntax: false,
+	minifySyntax: true,
 	minifyIdentifiers: true,
+	metafile: true,
+	splitting: true,
 	minifyWhitespace: true,
+	minify: true,
+
 	treeShaking: true,
 	entryPoints: [
-		...glob.sync("./src/deps/**/*.ts", { absolute: true }),
+		// ...glob.sync("./module_shims/*.ts", { absolute: true }),
 		"./src/index.ts",
+		"./src/protocol.ts",
 	],
-}).then(() => {
-	process.nextTick(() => {
+})
+	.then((output) => {
+		return writeFile("./metafile.json", JSON.stringify(output.metafile));
+	})
+	.then(() => {
 		try {
-			execSync("npx tsc", {
-				stdio: "inherit",
-				shell: "zsh",
-				encoding: "utf-8",
+			process.nextTick(() => {
+				try {
+					execSync("npx tsc -p ./tsconfig.build.json", {
+						stdio: "inherit",
+						shell: "zsh",
+						encoding: "utf-8",
+					});
+				} catch {}
 			});
 		} catch {}
 	});
-});

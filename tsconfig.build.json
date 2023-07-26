@@ -16,8 +16,11 @@
 		"noEmit": false,
 		"noResolve": true,
 		"declarationDir": "./dist",
+		"declarationMap": false,
 		"declaration": true,
-
+		"baseUrl": ".",
+		"outDir": "./dist",
+		"rootDirs": ["./src"],
 		"skipDefaultLibCheck": true,
 		"allowSyntheticDefaultImports": true,
 		/* Linting */
@@ -25,7 +28,7 @@
 		"noFallthroughCasesInSwitch": true
 	},
 	"include": [
-		"src/**/*.ts",
+		"src/*.ts",
 		"@open-rpc/client-js/build/transports/Transport.js",
 		"@open-rpc/client-js/build/transports/Transport.{d.ts,js}",
 		"@open-rpc/client-js/build/Request.{d.ts,js}",

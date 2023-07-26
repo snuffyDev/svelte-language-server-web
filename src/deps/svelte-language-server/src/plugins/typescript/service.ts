@@ -1,7 +1,7 @@
 import { posix } from "./../../../../path-deno";
 const { basename, dirname, resolve } = posix;
 import ts from "typescript";
-import { TextDocumentContentChangeEvent } from "vscode-languageserver-protocol";
+import { TextDocumentContentChangeEvent } from "vscode-languageserver-protocol/browser";
 import { getPackageInfo, importSvelte } from "../../importPackage";
 import { Document } from "../../lib/documents";
 import { configLoader } from "../../lib/documents/configLoader";

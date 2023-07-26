@@ -1,3 +1,4 @@
-import { Worker } from "./dist/index";
+import { SvelteLanguageWorker } from "./dist/";
 
-export default Worker();
+// console.log(VFS.readDirectory("/"));
+export default SvelteLanguageWorker();

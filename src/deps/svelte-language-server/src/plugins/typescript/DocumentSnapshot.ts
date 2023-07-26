@@ -252,7 +252,6 @@ function preprocessSvelteFile(
 		// We know it's there, it's not part of the public API so people don't start using it
 		htmlAst = (tsx as any).htmlAst;
 
-		console.log({ text, htmlAst, parserError, exportedNames, tsx });
 		if (tsxMap) {
 			tsxMap.sources = [document.uri];
 

@@ -1,7 +1,7 @@
+import { Dirent, Stats } from "fs";
 //@ts-ignore
 import { resolve } from "../src/deps/path-deno";
 import { VFS } from "../src/vfs";
-
 interface ReadOptions {
 	encoding?: Encoding;
 	flag?: string;
@@ -217,14 +217,15 @@ function readdirSyncWithFileTypes(path: string | Buffer | URL): Dirent[] {
 	const normalizedPath = normalizePath(path.toString());
 	const files = VFS.readDirectory(normalizedPath);
 
-	return files.map((file) => ({
-		name: file,
-		isFile: () => VFS.fileExists(file),
-		isDirectory: () => !VFS.fileExists(file),
-	}));
+	return files.map(
+		(file) =>
+			({
+				name: file,
+				isFile: () => VFS.fileExists(file),
+				isDirectory: () => !VFS.fileExists(file),
+			} as Dirent),
+	);
 }
-
-import { Dirent, Stats } from "fs";
 
 type Encoding = BufferEncoding | null;
 
@@ -401,9 +402,8 @@ function readdirSync(path: string | Buffer | URL): string[] {
 }
 
 function realpathSync(path: string | Buffer | URL): string {
-	const normalizedPath = normalizePath(path.toString());
-	// Not supported in the vfs, but can be implemented if needed.
-	// throw new Error('realpathSync is not supported in the vfs');
+	const _normalizedPath = normalizePath(path.toString());
+	return _normalizedPath;
 }
 
 function stat(path: string | Buffer | URL): Promise<Stats> {
@@ -464,15 +464,15 @@ const rw = {
 	realpath: realpathSync,
 };
 
+// @ts-expect-error mocking node fs functionality
 rw.realpath.native = (path, options, callback) => {
 	if (!callback) options(null, resolve(path));
 	else if (callback) callback(null, resolve(path));
 };
+// @ts-expect-error mocking node fs functionality
 rw.realpathSync.native = (path, options) => {
 	return resolve(path);
 };
-
-// export * from "../fsImpl";
 
 const proxy = new Proxy(
 	{ [S]: () => {}, ...rw },
@@ -635,4 +635,5 @@ function promisify(original) {
 	);
 }
 var _TextDecoder = TextDecoder;
+
 export { _TextDecoder as TextDecoder, promisify };

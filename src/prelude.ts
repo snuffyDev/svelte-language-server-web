@@ -9,4 +9,5 @@ import process from "process";
 // @ts-expect-error patching process.versions
 process.versions = {};
 process.versions.node = "v16.16.1";
+process.browser = true;
 export {};

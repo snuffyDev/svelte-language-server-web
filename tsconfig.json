@@ -16,8 +16,10 @@
 		"noEmit": false,
 		"noResolve": false,
 		"declarationDir": "./dist",
+		"rootDirs": ["src", "src/deps", "src/deps/svelte-language-server"],
+		"baseUrl": ".",
 		"declaration": true,
-
+		"declarationMap": true,
 		"skipDefaultLibCheck": true,
 		"allowSyntheticDefaultImports": true,
 		/* Linting */
@@ -25,5 +27,11 @@
 		"noFallthroughCasesInSwitch": true
 	},
 	"exclude": ["node_modules/@open-rpc/client-js/src/transports/Transport.ts"],
-	"include": ["src/main.ts", "src/**/*.d.ts", "vite-env.d.ts"]
+	"include": [
+		"src/index.ts",
+		"src/deps/svelte-language-server/src/index.",
+		"src/**/*.ts",
+		"src/worker.ts",
+		"vite-env.d.ts"
+	]
 }

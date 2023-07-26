@@ -27,11 +27,6 @@ import {
 	InlayHintRefreshRequest,
 	DidChangeWatchedFilesNotification,
 } from "vscode-languageserver//browser";
-import {
-	BrowserMessageReader as IPCMessageReader,
-	BrowserMessageWriter as IPCMessageWriter,
-	createConnection,
-} from "vscode-languageserver/browser";
 import { DiagnosticsManager } from "./lib/DiagnosticsManager";
 import { Document, DocumentManager } from "./lib/documents";
 import { getSemanticTokenLegends } from "./lib/semanticToken/semanticTokenLegend";
@@ -53,7 +48,7 @@ import {
 	normalizeUri,
 	urlToPath,
 } from "./utils";
-import { FallbackWatcher } from "./lib/FallbackWatcher";
+// import { FallbackWatcher } from "./lib/FallbackWatcher";
 import { configLoader } from "./lib/documents/configLoader";
 import { setIsTrusted } from "./importPackage";
 import { SORT_IMPORT_CODE_ACTION_KIND } from "./plugins/typescript/features/CodeActionsProvider";
@@ -90,22 +85,6 @@ export interface LSOptions {
  */
 export function startServer(options?: LSOptions) {
 	let connection = options?.connection;
-	if (!connection) {
-		if (process.argv.includes("--stdio")) {
-			console.log = (...args: any[]) => {
-				console.warn(...args);
-			};
-			connection = createConnection(
-				{ window } as never,
-				console.log as never,
-			) as never;
-		} else {
-			connection = createConnection(
-				new IPCMessageReader(process),
-				new IPCMessageWriter(process),
-			);
-		}
-	}
 
 	if (options?.logErrorsOnly !== undefined) {
 		Logger.setLogErrorsOnly(options.logErrorsOnly);
@@ -117,8 +96,9 @@ export function startServer(options?: LSOptions) {
 	const configManager = new LSConfigManager();
 	const pluginHost = new PluginHost(docManager);
 	let sveltePlugin: SveltePlugin = undefined as any;
-	let watcher: FallbackWatcher | undefined;
+	// let watcher: FallbackWatcher | undefined;
 
+	// @ts-expect-error it's fine
 	connection.onInitialize((evt) => {
 		const workspaceUris = evt.workspaceFolders?.map((folder) =>
 			folder.uri.toString(),
@@ -128,17 +108,17 @@ export function startServer(options?: LSOptions) {
 			Logger.error("No workspace path set");
 		}
 
-		if (
-			import.meta.env.DEV === false &&
-			!evt.capabilities.workspace?.didChangeWatchedFiles
-		) {
-			const workspacePaths = workspaceUris
-				.map(urlToPath)
-				.filter(isNotNullOrUndefined);
-			watcher = new FallbackWatcher("**/*.{ts,js}", workspacePaths);
-			console.log(watcher);
-			watcher.onDidChangeWatchedFiles(onDidChangeWatchedFiles);
-		}
+		// if (
+		// 	import.meta.env.DEV === false &&
+		// 	!evt.capabilities.workspace?.didChangeWatchedFiles
+		// ) {
+		// 	const workspacePaths = workspaceUris
+		// 		.map(urlToPath)
+		// 		.filter(isNotNullOrUndefined);
+		// 	// watcher = new FallbackWatcher("**/*.{ts,js}", workspacePaths);
+		// 	console.log(watcher);
+		// 	watcher.onDidChangeWatchedFiles(onDidChangeWatchedFiles);
+		// }
 
 		const isTrusted: boolean = evt.initializationOptions?.isTrusted ?? true;
 		configLoader.setDisabled(!isTrusted);
@@ -255,7 +235,7 @@ export function startServer(options?: LSOptions) {
 						includeText: false,
 					},
 				},
-				diagnosticProvider: {},
+				diagnosticProvider: true,
 				hoverProvider: true,
 				completionProvider: {
 					resolveProvider: true,
@@ -355,7 +335,6 @@ export function startServer(options?: LSOptions) {
 
 	connection.onInitialized(() => {
 		if (
-			!watcher &&
 			configManager.getClientCapabilities()?.workspace?.didChangeWatchedFiles
 				?.dynamicRegistration
 		) {
@@ -380,7 +359,7 @@ export function startServer(options?: LSOptions) {
 	}
 
 	connection.onExit(() => {
-		watcher?.dispose();
+		// watcher?.dispose();
 	});
 
 	connection.onRenameRequest((req) =>

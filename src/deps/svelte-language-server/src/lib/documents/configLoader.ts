@@ -166,9 +166,19 @@ export class ConfigLoader {
 	private async loadConfig(configPath: string, directory: string) {
 		try {
 			console.log({ configPath, directory });
-			let config = this.disabled
-				? {}
-				: await VFS.readFile("file:///svelte.config.js");
+			const parseConfig = () => {
+				const file = VFS.readFile("file:///svelte.config.js");
+				const hasExport = file.match(/export default/g).length;
+				if (hasExport) {
+					const startExport = file.lastIndexOf("export default");
+					const startCb = file.slice(startExport).indexOf("{");
+					const endCb = file.lastIndexOf("}");
+					return file;
+				}
+				return "{}";
+			};
+			console.log();
+			let config = this.disabled ? {} : {};
 
 			if (!config) {
 				throw new Error(

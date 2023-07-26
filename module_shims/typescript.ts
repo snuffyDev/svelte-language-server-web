@@ -1,4 +1,7 @@
-import typescript = require("typescript/lib/typescript");
+import process from "process";
+process.browser = true;
+
+import typescript from "typescript/lib/typescript";
 const { createLanguageService } = typescript;
 import {
 	createSystem,
@@ -6,6 +9,7 @@ import {
 } from "@typescript/vfs";
 
 const sys = createSystem(new Map());
+console.log({ typescript });
 const languageHost = createVirtualLanguageServiceHost(
 	sys,
 	[],

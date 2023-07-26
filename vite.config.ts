@@ -29,6 +29,9 @@ export default defineConfig({
 	esbuild: {
 		minifySyntax: false,
 		minifyIdentifiers: false,
+		define: {
+			"process.env.NODE_ENV": '"production"',
+		},
 	},
 
 	optimizeDeps: {

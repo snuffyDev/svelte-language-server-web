@@ -85,9 +85,10 @@ export default {
 );
 
 // Create the tsConfig (should be done somewhere else!)
-VFS.writeFile(
-	"/tsconfig.json",
-	`{
+if (!VFS.fileExists("/tsconfig.json"))
+	VFS.writeFile(
+		"/tsconfig.json",
+		`{
 	"compilerOptions": {
 		"target": "ESNext",
 		"useDefineForClassFields": true,
@@ -106,10 +107,9 @@ VFS.writeFile(
 	}
 }
 `,
-);
+	);
 
 // SET SVELTE DEFINITIONS
-// @ts-expect-error glob?
 const files = import.meta.glob("/node_modules/svelte/**/*.d.ts", {
 	eager: true,
 	as: "raw",
@@ -119,7 +119,6 @@ for (const file in files) {
 }
 
 // SET SVELTE2TSX DEFINITIONS
-// @ts-expect-error glob?
 const filesS2TSX = import.meta.glob("/node_modules/svelte2tsx/**/*.d.ts", {
 	eager: true,
 	as: "raw",
@@ -129,7 +128,6 @@ for (const file in filesS2TSX) {
 }
 
 // SET PREPROCESS DEFINITIONS
-// @ts-expect-error glob?
 const preprocess = import.meta.glob(
 	"/node_modules/svelte-preprocess/dist/**/*.d.ts",
 	{

@@ -5,13 +5,15 @@ import { EditorView, hoverTooltip, keymap } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
 import { vscodeKeymap } from "@replit/codemirror-vscode-keymap";
 import { svelte } from "@replit/codemirror-lang-svelte";
-import PostMessageWorkerTransport from "./src/transport.js";
+import { PostMessageWorkerTransport } from "./dist/protocol";
+
 import {
 	LanguageServerClient,
 	languageServerWithTransport,
 } from "codemirror-languageserver";
-// @ts-expect-error
-import Worker from "./main_worker?worker";
+
+//@ts-expect-error
+import SvelteWorker from "./main_worker?worker";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { marked } from "marked";
 import { markedHighlight } from "marked-highlight";
@@ -26,7 +28,7 @@ marked.use({
 const nav = document.querySelector("nav");
 const [button1, button2] = nav!.querySelectorAll<HTMLButtonElement>("button");
 
-const SvelteWorker = () => new Worker();
+const svelteWorker: Worker = new SvelteWorker();
 
 const hoverMarked = hoverTooltip((view, pos, side) => {
 	let { from, to, text } = view.state.doc.lineAt(pos);
@@ -50,6 +52,29 @@ const hoverMarked = hoverTooltip((view, pos, side) => {
 	};
 });
 
+const init_files = {
+	"/tsconfig.json": `{
+		"compilerOptions": {
+		  "target": "es5",
+		  "module": "commonjs",
+		  "lib": [
+			"dom",
+			"es2015"
+		  ],
+		  "jsx": "react",
+		  "declaration": true,
+		  "outDir": "./build",
+		  "strict": true,
+		  "esModuleInterop": true,
+		  "resolveJsonModule": true
+		}
+	  }`,
+};
+
+// Send over the user config files to the worker
+svelteWorker.postMessage({ method: "setup", params: init_files });
+
+// Regular files
 const files = {
 	"Comp1.svelte": `<script lang="ts">
 	function add(a, b) {
@@ -105,9 +130,7 @@ const files = {
 `,
 };
 
-const svelteWorker = SvelteWorker;
-const transport = new PostMessageWorkerTransport(svelteWorker());
-
+const transport = new PostMessageWorkerTransport(svelteWorker);
 const states = new Map<`file:///${keyof typeof files}`, EditorState>();
 
 let code = files["App.svelte"];
