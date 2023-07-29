@@ -8,7 +8,6 @@ const sync = (glob: string, options) => {
 		os: "linux",
 	});
 	return VFS.readDirectory("/").filter((v) => regexp.exec(v));
-	console.log(regexp);
 };
 
 export default {

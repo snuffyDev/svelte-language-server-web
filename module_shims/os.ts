@@ -1,4 +1,6 @@
-// import { platform } from "os";
+/** esbuild-ignore */
+// @ts=ignore
+import process from "process";
 
 export const EOL = "\n";
 export function platform() {

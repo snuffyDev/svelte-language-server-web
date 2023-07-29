@@ -1,16 +1,30 @@
 /** @typedef {Partial<Record<`node:${import('node-stdlib-browser').PackageNames}` | `${import('node-stdlib-browser').PackageNames}`, 'empty' | undefined | boolean>>} Modules */
+import npmDts from "npm-dts";
+const { Generator } = npmDts;
 import { build, transform } from "esbuild";
-import { readFileSync, readdirSync, rmSync } from "fs";
-import { readFile, writeFile } from "fs/promises";
-import { createRequire } from "module";
+import {
+	readFileSync,
+	readdirSync,
+	rmSync,
+	writeFile,
+	writeFileSync,
+} from "fs";
+import { readFile } from "fs/promises";
+import { builtinModules, createRequire } from "module";
 import path from "path";
 import { nodeModulesPolyfillPlugin } from "esbuild-plugins-node-modules-polyfill";
 import { execSync } from "child_process";
 import resolve from "esbuild-plugin-resolve";
+import { dtsPlugin } from "esbuild-plugin-d.ts";
 const require = createRequire(import.meta.url);
 const moduleShimmerName = "ModuleShimmer";
 const __dirname = path.resolve(".");
-
+const SVELTELAB_DIR = path.resolve(
+	"./../../Documents/GitHub/SvelteLab/src/lib/language_servers/svelte",
+);
+const DIST_DIR = path.resolve(
+"./dist",
+);
 const moduleShimmer = {
 	name: moduleShimmerName,
 	setup(build) {
@@ -67,12 +81,12 @@ const moduleShimmer = {
 			{
 				filter: /\/svelte-preprocess\/dist\/autoPreprocess\.js/,
 			},
-			async () => {
-				const contents = await readFile(
+			async (args) => {
+				const contents = await await readFile(
 					path.resolve(
 						__dirname,
-						"node_modules/svelte-preprocess/dist/autoProcess.js"
-					)
+						"node_modules/svelte-preprocess/dist/autoProcess.js",
+					),
 				).then((x) => x.toString());
 				// .replace("synchronizeHostData()", "if (false)");
 				return {
@@ -91,6 +105,7 @@ const moduleShimmer = {
 		});
 	},
 };
+
 function createAliasPlugin(aliasConfig) {
 	return {
 		name: "alias-plugin",
@@ -116,12 +131,8 @@ function createAliasPlugin(aliasConfig) {
 						format: "esm",
 						keepNames: true,
 
-						minify: true,
 						treeShaking: true,
 
-						minifySyntax: true,
-						minifyIdentifiers: true,
-						minifyWhitespace: true,
 						loader: "ts",
 					}).then((value) => value.code),
 				};
@@ -129,6 +140,7 @@ function createAliasPlugin(aliasConfig) {
 		},
 	};
 }
+
 const aliases = [
 	{
 		find: /vscode.html.languageservice.lib.umd.*webCustomData/,
@@ -173,21 +185,25 @@ const aliases = [
 	},
 ];
 try {
-	rmSync("./dist", { recursive: true });
+	// rmSync("./dist", { recursive: true });
+	rmSync(SVELTELAB_DIR, {
+		recursive: true,
+	});
 } catch (_a) {}
 await build({
 	plugins: [
 		nodeModulesPolyfillPlugin({
-			globals: { Buffer: true, process: true },
+			globals: {
+				Buffer: true,
+				process: true,
+			},
 			/**@type {Modules} */
 			modules: {
-				util: true,
-				buffer: true,
-				fs: true,
 				net: true,
-				os: true,
-				"node:process": true,
 				process: true,
+				buffer: true,
+				constants: true,
+				fs: true,
 			},
 		}),
 		moduleShimmer,
@@ -211,12 +227,12 @@ await build({
 			fs: path.resolve("./module_shims/"),
 			"graceful-fs": path.resolve("./module_shims"),
 		}),
-		// dtsPlugin(),
 	],
 	sourcemap: true,
 	platform: "browser",
 	external: ["@codemirror/state"],
 	outdir: "./dist",
+	// outdir: SVELTELAB_DIR,
 	loader: { ".ts": "ts", ".js": "js" },
 	define: {
 		global: "globalThis",
@@ -243,27 +259,24 @@ await build({
 	splitting: true,
 	minifyWhitespace: true,
 	minify: true,
-
 	treeShaking: true,
-	entryPoints: [
-		// ...glob.sync("./module_shims/*.ts", { absolute: true }),
-		"./src/index.ts",
-		"./src/protocol.ts",
-	],
+	entryPoints: ["./src/index.ts"],
 })
 	.then((output) => {
-		return writeFile("./metafile.json", JSON.stringify(output.metafile));
+		return writeFileSync("./metafile.json", JSON.stringify(output.metafile), {
+			encoding: "utf-8",
+		});
 	})
-	.then(() => {
+	.then(async () => {
 		try {
-			process.nextTick(() => {
-				try {
-					execSync("npx tsc -p ./tsconfig.build.json", {
-						stdio: "inherit",
-						shell: "zsh",
-						encoding: "utf-8",
-					});
-				} catch {}
-			});
+			try {
+				await new Generator({
+					entry: "src/index.ts",
+					force: true,
+					tsc: "-p ./tsconfig.build.json",
+					output: DIST_DIR + "/index.d.ts",
+				}).generate();
+			} catch {}
+			process.nextTick(() => {});
 		} catch {}
 	});

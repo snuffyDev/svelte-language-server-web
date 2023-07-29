@@ -226,7 +226,6 @@ function preprocessSvelteFile(
 	let text = document.getText();
 	let exportedNames: IExportedNames = { has: () => false };
 	let htmlAst: TemplateNode | undefined;
-	console.log({ text, htmlAst, parserError, exportedNames });
 	const scriptKind = [
 		getScriptKindFromAttributes(document.scriptInfo?.attributes ?? {}),
 		getScriptKindFromAttributes(document.moduleScriptInfo?.attributes ?? {}),

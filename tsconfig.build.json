@@ -3,7 +3,7 @@
 		"target": "ESNext",
 		"useDefineForClassFields": false,
 		"module": "ESNext",
-		"lib": ["ES2020", "DOM", "DOM.Iterable"],
+		"lib": ["ES2020", "DOM", "WebWorker", "Webworker.Iterable", "DOM.Iterable"],
 
 		/* Bundler mode */
 		"importHelpers": true,
@@ -15,23 +15,19 @@
 		"inlineSources": false,
 		"noEmit": false,
 		"noResolve": true,
-		"declarationDir": "./dist",
-		"declarationMap": false,
-		"declaration": true,
+		"rootDir": "src",
 		"baseUrl": ".",
-		"outDir": "./dist",
-		"rootDirs": ["./src"],
+		"declaration": true,
+
 		"skipDefaultLibCheck": true,
 		"allowSyntheticDefaultImports": true,
 		/* Linting */
 		"sourceMap": false,
 		"noFallthroughCasesInSwitch": true
 	},
-	"include": [
-		"src/*.ts",
-		"@open-rpc/client-js/build/transports/Transport.js",
-		"@open-rpc/client-js/build/transports/Transport.{d.ts,js}",
-		"@open-rpc/client-js/build/Request.{d.ts,js}",
-		"src/**/*.d.ts"
-	]
+	"exclude": [
+		"node_modules/@open-rpc/client-js/src/transports/Transport.ts",
+		"node_modules/**"
+	],
+	"include": ["src/index.ts"]
 }

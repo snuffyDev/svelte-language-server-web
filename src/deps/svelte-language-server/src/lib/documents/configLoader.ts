@@ -177,7 +177,6 @@ export class ConfigLoader {
 				}
 				return "{}";
 			};
-			console.log();
 			let config = this.disabled ? {} : {};
 
 			if (!config) {

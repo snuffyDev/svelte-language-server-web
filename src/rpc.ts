@@ -1,6 +1,6 @@
-export { default as Transport } from "./transport";
+export { default as PostMessageWorkerTransport } from "./transport";
 export { getNotifications } from "@open-rpc/client-js/build/Request";
 export type {
 	JSONRPCRequestData,
 	IJSONRPCData,
-} from "@open-rpc/client-js/src/Request";
+} from "@open-rpc/client-js/build/Request";

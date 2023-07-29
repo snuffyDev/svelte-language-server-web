@@ -5,16 +5,15 @@ import "./prelude";
 import process from "process";
 
 //@ts-ignore
-import _ts = require("../module_shims/typescript");
+import _ts = require("typescript");
 const ts = _ts.default;
-
 import * as Buffer from "buffer/";
 
 import {
 	SvelteConfig,
 	setConfigLoader,
 } from "./deps/svelte-language-server/src/lib/documents/configLoader.js";
-import fs from "./../module_shims/fs";
+import fs = require("fs");
 
 //@ts-ignore
 import ppts = require("svelte-preprocess/dist/processors/typescript.js");
@@ -105,6 +104,7 @@ const required = {
 	"svelte-preprocess/package.json": { version: preprocess_version },
 	"svelte-preprocess/autoProcess.js": preprocess,
 	"svelte-preprocess": preprocess,
+	fs,
 	"graceful-fs": fs,
 	typescript: ts,
 	"../transformers/typescript.js": { transformer: transformerTS.transformer },
@@ -136,7 +136,6 @@ globalThis.require.resolve = (x) => x;
 globalThis.importSvelte = required["svelte/compiler"];
 globalThis.importSveltePreprocess = required["svelte-preprocess"];
 globalThis.importPrettier = required["prettier"];
-
 const throwIfRequire = {
 	"./node_modules/@microsoft/typescript-etw": true,
 	"svelte-native/package.json": true,

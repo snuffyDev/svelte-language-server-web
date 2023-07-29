@@ -1,8 +1,8 @@
 // https://gitlab.com/aedge/codemirror-web-workers-lsp-demo/-/blob/master/src/App.svelte
 export * from "@open-rpc/client-js/build/RequestManager";
-import { Transport } from "@open-rpc/client-js/build/transports/Transport";
+import { Transport } from "@open-rpc/client-js/src/transports/Transport";
 
-import { getNotifications } from "@open-rpc/client-js/build/Request";
+import { getNotifications } from "@open-rpc/client-js/src/Request";
 import type {
 	JSONRPCRequestData,
 	IJSONRPCData,
@@ -36,7 +36,7 @@ export default class PostMessageWorkerTransport extends Transport {
 		timeout: number | null = 5000,
 	): Promise<any> {
 		console.log("->", data);
-		const prom = this.transportRequestManager.addRequest(data, timeout);
+		const prom = this.transportRequestManager.addRequest(data, null);
 		const notifications = getNotifications(data);
 		if (this.worker) {
 			this.worker.postMessage((data as IJSONRPCData).request);

@@ -163,12 +163,9 @@ function resolve(...pathSegments) {
 		if (i >= 0) {
 			path = pathSegments[i];
 		} else if (!resolvedDevice) {
-			if (typeof process?.cwd !== "function") {
-				throw new TypeError("Resolved a drive-letter-less path without a CWD.");
-			}
-			path = process.cwd();
+			path = process.cwd?.() || "/";
 		} else {
-			path = process.cwd();
+			path = process.cwd?.() || "/";
 			if (
 				path === undefined ||
 				path.slice(0, 3).toLowerCase() !== `${resolvedDevice.toLowerCase()}\\`

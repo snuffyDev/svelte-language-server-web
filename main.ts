@@ -5,7 +5,7 @@ import { EditorView, hoverTooltip, keymap } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
 import { vscodeKeymap } from "@replit/codemirror-vscode-keymap";
 import { svelte } from "@replit/codemirror-lang-svelte";
-import { PostMessageWorkerTransport } from "./dist/protocol";
+import { PostMessageWorkerTransport } from "./dist";
 
 import {
 	LanguageServerClient,
@@ -150,22 +150,23 @@ const ls = new LanguageServerClient({
 	languageId: "",
 	workspaceFolders: [{ name: "root", uri: "/" }],
 });
-
+const language_client = languageServerWithTransport({
+	transport,
+	documentUri: "file:///App.svelte",
+	languageId: "svelte",
+	workspaceFolders: [{ name: "root", uri: "/" }],
+	rootUri: "/",
+	allowHTMLContent: true,
+	autoClose: false,
+	client: ls,
+});
 const createEditorState = (uri: string) =>
 	EditorState.create({
+		doc: code,
 		extensions: [
 			basicSetup,
 			watcher,
-			languageServerWithTransport({
-				transport,
-				documentUri: uri,
-				languageId: uri.includes("svelte") ? "svelte" : "typescript",
-				workspaceFolders: [{ name: "root", uri: "/" }],
-				rootUri: "/",
-				allowHTMLContent: true,
-				autoClose: false,
-				client: ls,
-			}),
+			language_client,
 			keymap.of(vscodeKeymap),
 			oneDark,
 			svelte(),
@@ -179,7 +180,7 @@ states.set("file:///App.svelte", createEditorState("file:///App.svelte"));
 const editor = new EditorView({
 	state: states.get("file:///App.svelte"),
 	parent: document.getElementById("editor")!,
-	extensions: [],
+	extensions: null,
 });
 
 button1.onclick = () => {

@@ -1,7 +1,5 @@
 # svelte-language-server-web
 
-**WIP**
-
 Svelte language server within a web worker.
 
 Based on/inspired by: https://github.com/asafamr/monaco-svelte/
@@ -10,4 +8,10 @@ Based on/inspired by: https://github.com/asafamr/monaco-svelte/
 
 - Uses latest packages for TS, Svelte, svelte-preprocess, etc.
 - Editor-agnostic, use with Monaco, VSCode Web, CodeMirror...
-- TODO: list the rest
+- Works (almost) fully like you'd expect!
+
+## Demo
+
+Need convinced? [Try it out here!](https://cm-lsp.vercel.app/)
+
+_(demo uses CodeMirror 6, paired with https://github.com/FurqanSoftware/codemirror-languageserver)_

@@ -62,7 +62,6 @@ export class HTMLPlugin
 			customDataProviders: this.getCustomDataProviders(),
 			useDefaultDataProvider: false,
 		});
-		console.log({ configManager });
 		configManager.onChange(() =>
 			this.lang.setDataProviders(false, this.getCustomDataProviders()),
 		);

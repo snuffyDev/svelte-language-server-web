@@ -1,6 +1,6 @@
 import "./../../../prelude";
 import "./../../../global_patches";
-import ts from "./../../../../module_shims/typescript";
+import ts from "typescript";
 import {
 	ApplyWorkspaceEditParams,
 	ApplyWorkspaceEditRequest,
@@ -385,7 +385,6 @@ export function startServer(options?: LSOptions) {
 	connection.onDidOpenTextDocument((evt) => {
 		const document = docManager.openDocument(evt.textDocument);
 		docManager.markAsOpenedInClient(evt.textDocument.uri);
-		console.log({ sys: ts.sys });
 		setTimeout(() => diagnosticsManager.scheduleUpdate(document), 0);
 		// console.log;
 	});
@@ -403,7 +402,6 @@ export function startServer(options?: LSOptions) {
 	});
 	connection.onHover(async (evt) => {
 		const result = await pluginHost.doHover(evt.textDocument, evt.position);
-		console.log({ sys: ts.sys });
 
 		// console.log(result);
 		if (!result) return null;
@@ -424,8 +422,6 @@ export function startServer(options?: LSOptions) {
 		return result;
 	});
 	connection.onCompletion((evt, cancellationToken) => {
-		console.log(evt, cancellationToken);
-
 		return pluginHost.getCompletions(
 			evt.textDocument,
 			evt.position,

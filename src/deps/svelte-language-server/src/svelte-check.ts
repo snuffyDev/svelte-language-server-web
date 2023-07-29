@@ -1,5 +1,5 @@
 import { isAbsolute } from "path";
-import ts from "../../../../module_shims/typescript";
+import ts from "typescript";
 import { Diagnostic, Position, Range } from "vscode-languageserver/browser";
 import { WorkspaceFolder } from "vscode-languageserver-protocol/browser";
 import { Document, DocumentManager } from "./lib/documents";

@@ -19,28 +19,37 @@ export default defineConfig({
 	build: {
 		rollupOptions: {
 			treeshake: false,
-			output: { sourcemap: false },
+			output: { compact: false, sourcemap: false },
 			watch: false,
 		},
 		sourcemap: false,
 		minify: false,
-		outDir: "build",
+		lib: { entry: "dist/index.js", formats: ["es"] },
+		outDir: "../../Documents/GitHub/SvelteLab/src/lib/language_servers/svelte",
+	},
+	worker: {
+		rollupOptions: {
+			treeshake: false,
+			output: { compact: false, sourcemap: false },
+			watch: false,
+		},
 	},
 	esbuild: {
 		minifySyntax: false,
 		minifyIdentifiers: false,
+		minifyWhitespace: false,
 		define: {
 			"process.env.NODE_ENV": '"production"',
 		},
 	},
 
 	optimizeDeps: {
-		exclude: ["./dist/index.js"],
 		esbuildOptions: {
 			minify: false,
 			minifySyntax: false,
 			minifyIdentifiers: false,
 		},
+		exclude: ["typescript"],
 		force: true,
 	},
 	preview: {},

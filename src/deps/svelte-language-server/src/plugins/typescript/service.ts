@@ -302,7 +302,6 @@ async function createLanguageService(
 		getCurrentDirectory: () => workspacePath,
 		fileExists: svelteModuleLoader.fileExists,
 		readFile: (...args) => {
-			console.log("readFile");
 			return svelteModuleLoader.readFile(...args);
 		},
 		resolveModuleNames: svelteModuleLoader.resolveModuleNames,
@@ -315,7 +314,6 @@ async function createLanguageService(
 	let languageService = ts.createLanguageService(
 		languageServiceHost.languageServiceHost,
 	);
-	console.log({ test: languageService });
 	const transformationConfig: SvelteSnapshotOptions = {
 		transformOnTemplateError: docContext.transformOnTemplateError,
 		typingsNamespace: raw?.svelteOptions?.namespace || "svelteHTML",

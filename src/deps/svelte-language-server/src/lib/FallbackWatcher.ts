@@ -27,7 +27,6 @@ export class FallbackWatcher {
 
 	constructor(glob: string, workspacePaths: string[]) {
 		const gitOrNodeModules = /\.git|node_modules/;
-		console.log({ watch });
 		this.watcher = watch(
 			workspacePaths.map((workspacePath) => join(workspacePath, glob)),
 			{

@@ -21,7 +21,6 @@ export class FileSystemProvider implements CSSFileSystemProvider {
 
 	constructor() {
 		this.readDirectory = this.readDirectory.bind(this);
-		console.log(this.promisifyReaddir, this.promisifyReaddir, readdir);
 		this.stat = this.stat.bind(this);
 	}
 

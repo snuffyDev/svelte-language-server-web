@@ -1,4 +1,5 @@
 import ts from "typescript";
+
 const sys = ts.sys;
 
 import json from "./libs.json";
@@ -7,7 +8,9 @@ import _path from "./deps/path-deno";
 class VFSImpl {
 	public static normalize(path: string) {
 		return _path.posix.fromFileUrl(
-			path.startsWith("file:///") ? path : new URL(_path.posix.toFileUrl(path)),
+			path.startsWith("file:///")
+				? path
+				: new URL(_path.posix.toFileUrl(_path.posix.resolve(path))),
 		);
 	}
 
