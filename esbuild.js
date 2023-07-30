@@ -231,8 +231,8 @@ await build({
 	sourcemap: true,
 	platform: "browser",
 	external: ["@codemirror/state"],
-	outdir: "./dist",
-	// outdir: SVELTELAB_DIR,
+	// outdir: DIST_DIR,
+	outdir: SVELTELAB_DIR,
 	loader: { ".ts": "ts", ".js": "js" },
 	define: {
 		global: "globalThis",
@@ -260,7 +260,10 @@ await build({
 	minifyWhitespace: true,
 	minify: true,
 	treeShaking: true,
-	entryPoints: ["./src/index.ts"],
+	entryPoints: [
+		// ...glob.sync("./module_shims/*.ts", { absolute: true }),
+		"./src/index.ts",
+	],
 })
 	.then((output) => {
 		return writeFileSync("./metafile.json", JSON.stringify(output.metafile), {

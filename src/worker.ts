@@ -19,6 +19,7 @@ import { AddFilesMessage, SetupMessage, workerRPCMethods } from "./messages";
 
 addEventListener("messageerror", (e) => console.error(e));
 addEventListener("error", (e) => console.error(e));
+let hasBeenSetup = false;
 
 /**
  * This is the entry point for the Svelte Language Server Web Worker.
@@ -45,10 +46,7 @@ addEventListener("error", (e) => console.error(e));
  * ```
  */
 export default () => {
-	let hasBeenSetup = false;
-	const isRPCMessage = (
-		data: unknown,
-	): data is SetupMessage | AddFilesMessage =>
+	const isRPCMessage = (data: unknown): data is SetupMessage | AddFileMessage =>
 		data &&
 		typeof data === "object" &&
 		"method" in data &&
@@ -61,13 +59,14 @@ export default () => {
 				for (const key in event.data?.params) {
 					VFS.writeFile(key, event.data?.params[key] as string);
 				}
-				if (!hasBeenSetup) {
+				if (event.data.method === "@@setup") {
+					console.log("Setting up Svelte Language Server...");
 					hasBeenSetup = true;
 					startServer({ connection: conn });
 				}
 			}
 		});
 	} catch (e) {
-		console.log({ error: e });
+		console.log({ eRROR: e });
 	}
 };

@@ -14,3 +14,11 @@ type SetupMessage = WorkerMessage<"@@setup">;
 type AddFilesMessage = WorkerMessage<"@@add-files">;
 
 export type { WorkerMessage, SetupMessage, AddFilesMessage };
+
+export const createWorkerMessage = <T extends WorkerRPCMethod>(
+	method: "setup" | "add-files",
+	params: WorkerMessage<T>["params"],
+): WorkerMessage<T> => ({
+	method: `@@${method}` as T,
+	params,
+});
