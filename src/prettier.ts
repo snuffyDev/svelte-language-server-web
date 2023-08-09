@@ -48,3 +48,4 @@ prettier.format = (source: string, options?: import("prettier").Options) =>
 	});
 
 export { prettier };
+export default prettier;

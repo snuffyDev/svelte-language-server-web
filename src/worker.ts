@@ -6,6 +6,16 @@ import {
 	createConnection,
 } from "vscode-languageserver/browser";
 
+import { startServer } from "./server";
+import { VFS } from "./vfs";
+import type {
+	AddFilesMessage,
+	FetchTypesMessage,
+	SetupMessage,
+	WorkerRPCMethod,
+} from "./messages";
+import { fetchTypeDefinitionsFromCDN } from "./features/autoTypings";
+
 const worker = globalThis as unknown as DedicatedWorkerGlobalScope;
 
 const conn = createConnection(
@@ -13,13 +23,14 @@ const conn = createConnection(
 	new BrowserMessageWriter(worker),
 );
 
-import { startServer } from "./server";
-import { VFS } from "./vfs";
-import { AddFilesMessage, SetupMessage, workerRPCMethods } from "./messages";
+const workerRPCMethods: ReadonlyArray<WorkerRPCMethod> = [
+	"@@add-files",
+	"@@setup",
+	"@@fetch-types",
+];
 
 addEventListener("messageerror", (e) => console.error(e));
 addEventListener("error", (e) => console.error(e));
-let hasBeenSetup = false;
 
 /**
  * This is the entry point for the Svelte Language Server Web Worker.
@@ -45,8 +56,10 @@ let hasBeenSetup = false;
  *
  * ```
  */
-export default () => {
-	const isRPCMessage = (data: unknown): data is SetupMessage | AddFileMessage =>
+export const SvelteLanguageWorker = () => {
+	const isRPCMessage = (
+		data: unknown,
+	): data is SetupMessage | FetchTypesMessage | AddFilesMessage =>
 		data &&
 		typeof data === "object" &&
 		"method" in data &&
@@ -54,19 +67,50 @@ export default () => {
 
 	try {
 		console.log("Svelte Language Server running. Waiting for setup message.");
-		addEventListener("message", function removeHandler(event) {
-			if (isRPCMessage(event.data)) {
-				for (const key in event.data?.params) {
-					VFS.writeFile(key, event.data?.params[key] as string);
+
+		const handleFetchTypes = (data: FetchTypesMessage) => {
+			VFS.writeFile("/package.json", JSON.stringify(data.params));
+
+			return fetchTypeDefinitionsFromCDN(data.params).then((types) => {
+				for (const [key, value] of types) {
+					VFS.writeFile(`/node_modules/${key}/index.d.ts`, value);
 				}
+			});
+		};
+
+		addEventListener("message", async (event) => {
+			// Process our custom RPC messages
+			if (isRPCMessage(event.data)) {
+				if (event.data.method === "@@fetch-types") {
+					console.log({ event, json: event.data.params });
+					await handleFetchTypes(event.data).then(() => {
+						postMessage({ method: "fetch-types-complete" });
+					});
+					return;
+				}
+
+				await new Promise<void>((resolve) => {
+					const fileNames = Object.keys(event.data.params);
+					for (let i = 0; i < fileNames.length; i++) {
+						const fileName = fileNames[i];
+						const fileContents = event.data.params[fileName];
+
+						VFS.writeFile(fileName, fileContents);
+						if (i === fileNames.length - 1) {
+							resolve();
+						}
+					}
+				});
+
 				if (event.data.method === "@@setup") {
 					console.log("Setting up Svelte Language Server...");
-					hasBeenSetup = true;
-					startServer({ connection: conn });
+					queueMicrotask(() => {
+						startServer({ connection: conn });
+					});
 				}
 			}
 		});
 	} catch (e) {
-		console.log({ eRROR: e });
+		console.error({ error: e });
 	}
 };

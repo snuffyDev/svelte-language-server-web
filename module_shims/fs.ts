@@ -1,7 +1,9 @@
-import { Dirent, Stats } from "fs";
+import { Dirent, Stats, type WatchOptions } from "fs";
+
 //@ts-ignore
 import { resolve } from "../src/deps/path-deno";
-import { VFS } from "../src/vfs";
+import { FSWatcher, VFS } from "../src/vfs";
+import { basename, dirname, join, parse, posix } from "path";
 interface ReadOptions {
 	encoding?: Encoding;
 	flag?: string;
@@ -24,11 +26,11 @@ function readFile(
 	return new Promise((resolve, reject) => {
 		const normalizedPath = normalizePath(path.toString());
 		const encoding =
-			typeof options === "string" ? options : options.encoding || "utf8";
+			typeof options === "string" ? options : options?.encoding || "utf8";
 
 		try {
 			const data = VFS.readFile(normalizedPath, encoding);
-			resolve(data);
+			resolve(data as never);
 		} catch (error) {
 			reject(error);
 		}
@@ -80,6 +82,12 @@ function symlink(
 
 function closeSync(fd: number): void {
 	throw new Error("closeSync is not supported in the VFS");
+}
+
+function close(fd: number, callback: () => void): Promise<void> {
+	return new Promise((resolve, reject) => {
+		resolve();
+	});
 }
 
 function fchmodSync(fd: number, mode: string | number): void {
@@ -149,6 +157,20 @@ function mkdirSync(path: string | Buffer | URL, mode?: number): void {
 	VFS.createDirectory(normalizedPath);
 }
 
+function watch(
+	filename: string,
+	options?: { encoding?: Encoding; recursive?: boolean } | Encoding,
+	listener?: (event: string, filename: string) => void,
+): import("fs").FSWatcher {
+	const normalizedPath = normalizePath(filename);
+	const watcher = new FSWatcher(
+		normalizedPath,
+		options as never,
+		listener as never,
+	);
+	return watcher;
+}
+
 function statSync(
 	path: string | Buffer | URL,
 	options: StatsOptions = {},
@@ -197,8 +219,7 @@ function readFileSync(
 ): string | Buffer | undefined {
 	const normalizedPath = normalizePath(path.toString());
 	const encoding = typeof options === "string" ? options : options || "utf8";
-
-	return VFS.readFile(normalizedPath, encoding);
+	return VFS.readFile(normalizedPath, encoding) || Buffer.from([]);
 }
 
 function writeFileSync(
@@ -339,7 +360,7 @@ function lstatSync(path: string | Buffer | URL): Stats {
 		birthtime: new Date(),
 	};
 }
-
+const { watchFile } = VFS;
 function fstatSync(fd: number): Stats {
 	// Not supported in the vfs, but can be implemented if needed.
 	throw new Error("fstatSync is not supported in the vfs");
@@ -350,17 +371,7 @@ function readlinkSync(path: string | Buffer | URL): string {
 	// Not supported in the vfs, but can be implemented if needed.
 	throw new Error("readlinkSync is not supported in the vfs");
 }
-
-function watch(
-	filename: string,
-	options?: { encoding?: Encoding } | Encoding,
-	listener?: (event: string, filename: string) => void,
-): import("fs").FSWatcher {
-	const normalizedPath = normalizePath(filename);
-
-	// Not supported in the vfs, but can be implemented if needed.
-	throw new Error("watch is not supported in the vfs");
-}
+type EventListener = (...args: any[]) => void;
 
 function lstat(path: string | Buffer | URL): Promise<Stats> {
 	return new Promise((resolve, reject) => {
@@ -406,19 +417,23 @@ function realpathSync(path: string | Buffer | URL): string {
 	return _normalizedPath;
 }
 
-function stat(path: string | Buffer | URL): Promise<Stats> {
-	return new Promise((resolve, reject) => {
+function stat(
+	path: string | Buffer | URL,
+	callback: (err: Error | null, data: any) => void,
+): void {
+	try {
 		const normalizedPath = normalizePath(path.toString());
-
-		try {
-			const stats = lstat(normalizedPath);
-			resolve(stats);
-		} catch (error) {
-			reject(error);
-		}
-	});
+		const stats = statSync(normalizedPath);
+		callback(null, stats);
+	} catch (err) {
+		callback(err, null);
+	}
 }
 const S = Symbol.for("graceful-fs.queue");
+const realpath = (path, options, callback) => {
+	if (!callback) options(null, resolve(path));
+	else if (callback) callback(null, resolve(path));
+};
 
 const rw = {
 	"___graceful-fs.queue": () => {},
@@ -430,12 +445,14 @@ const rw = {
 	openSync,
 	readdir,
 	readdirSync,
+	realpath,
 	realpathSync,
 	stat,
 	statSync,
 	accessSync,
 	chmodSync,
 	chownSync,
+	watchFile,
 	linkSync,
 	symlinkSync,
 	truncateSync,
@@ -450,6 +467,8 @@ const rw = {
 	createReadStream,
 	createWriteStream,
 	exists,
+	close,
+
 	open,
 	symlink,
 	closeSync,
@@ -461,7 +480,6 @@ const rw = {
 	readSync,
 	writeFileSync,
 	readdirSyncWithFileTypes,
-	realpath: realpathSync,
 };
 
 // @ts-expect-error mocking node fs functionality
@@ -478,7 +496,7 @@ const proxy = new Proxy(
 	{ [S]: () => {}, ...rw },
 	{
 		get(target, prop, _receiver) {
-			console.warn(`FS GET`, { target, prop, _receiver });
+			// console.warn(`FS GET`, { target, prop, _receiver });
 			if (!target[prop]) target[prop] = {};
 
 			return Reflect.get(target, prop);
@@ -488,22 +506,26 @@ const proxy = new Proxy(
 		},
 
 		set(target, p, newValue, receiver) {
-			console.warn(`FS SET`, { target, p, newValue, receiver });
+			// console.warn(`FS SET`, { target, p, newValue, receiver });
 			return Reflect.set(target, p, newValue, receiver);
 		},
 	},
 );
+
 const {
 	readFile: _readFile,
 	readFileSync: _readFileSync,
 	existsSync: _existsSync,
 	lstat: _lstat,
 	openSync: _openSync,
+	watchFile: _watchFile,
 	readdir: _readdir,
+	realpath: _realpath,
 	readdirSync: _readdirSync,
 	realpathSync: _realpathSync,
 	stat: _stat,
 	statSync: _statSync,
+	close: _close,
 	accessSync: _accessSync,
 	chmodSync: _chmodSync,
 	chownSync: _chownSync,
@@ -539,11 +561,13 @@ export {
 	_readFileSync as readFileSync,
 	_existsSync as existsSync,
 	_lstat as lstat,
+	_watchFile as watchFile,
 	_openSync as openSync,
 	_readdir as readdir,
 	_readdirSync as readdirSync,
 	_realpathSync as realpathSync,
 	_stat as stat,
+	_close as close,
 	_statSync as statSync,
 	_accessSync as accessSync,
 	_chmodSync as chmodSync,
@@ -572,7 +596,9 @@ export {
 	_writeFile as writeFile,
 	_mkdirSync as mkdirSync,
 	_writeFileSync as writeFileSync,
+	_realpath as realpath,
 };
+
 export default proxy;
 // In addition to being accessible through util.promisify.custom,
 // this symbol is registered globally and can be accessed in any environment as

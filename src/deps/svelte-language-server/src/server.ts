@@ -56,6 +56,7 @@ import { createLanguageServices } from "./plugins/css/service";
 import { FileSystemProvider } from "./plugins/css/FileSystemProvider";
 import { marked } from "marked";
 import { VFS } from "../../../vfs";
+import { FallbackWatcher } from "./lib/FallbackWatcher";
 
 namespace TagCloseRequest {
 	export const type: RequestType<
@@ -96,7 +97,7 @@ export function startServer(options?: LSOptions) {
 	const configManager = new LSConfigManager();
 	const pluginHost = new PluginHost(docManager);
 	let sveltePlugin: SveltePlugin = undefined as any;
-	// let watcher: FallbackWatcher | undefined;
+	let watcher: FallbackWatcher | undefined;
 
 	// @ts-expect-error it's fine
 	connection.onInitialize((evt) => {
@@ -108,17 +109,14 @@ export function startServer(options?: LSOptions) {
 			Logger.error("No workspace path set");
 		}
 
-		// if (
-		// 	import.meta.env.DEV === false &&
-		// 	!evt.capabilities.workspace?.didChangeWatchedFiles
-		// ) {
-		// 	const workspacePaths = workspaceUris
-		// 		.map(urlToPath)
-		// 		.filter(isNotNullOrUndefined);
-		// 	// watcher = new FallbackWatcher("**/*.{ts,js}", workspacePaths);
-		// 	console.log(watcher);
-		// 	watcher.onDidChangeWatchedFiles(onDidChangeWatchedFiles);
-		// }
+		if (!evt.capabilities.workspace?.didChangeWatchedFiles) {
+			const workspacePaths = workspaceUris
+				.map(urlToPath)
+				.filter(isNotNullOrUndefined);
+			watcher = new FallbackWatcher("**/*.{ts,js}", workspacePaths);
+			// console.log(watcher);
+			watcher.onDidChangeWatchedFiles(onDidChangeWatchedFiles);
+		}
 
 		const isTrusted: boolean = evt.initializationOptions?.isTrusted ?? true;
 		configLoader.setDisabled(!isTrusted);
@@ -176,10 +174,8 @@ export function startServer(options?: LSOptions) {
 		configManager.updateClientCapabilities(evt.capabilities);
 
 		pluginHost.initialize({
-			filterIncompleteCompletions:
-				!evt.initializationOptions?.dontFilterIncompleteCompletions,
-			definitionLinkSupport:
-				!!evt.capabilities.textDocument?.definition?.linkSupport,
+			filterIncompleteCompletions: false,
+			definitionLinkSupport: false,
 		});
 		// Order of plugin registration matters for FirstNonNull, which affects for example hover info
 		pluginHost.register((sveltePlugin = new SveltePlugin(configManager)));
@@ -235,8 +231,8 @@ export function startServer(options?: LSOptions) {
 						includeText: false,
 					},
 				},
-				diagnosticProvider: true,
 				hoverProvider: true,
+				diagnosticProvider: true,
 				completionProvider: {
 					resolveProvider: true,
 					triggerCharacters: [
@@ -346,6 +342,7 @@ export function startServer(options?: LSOptions) {
 				],
 			});
 		}
+		postMessage({ method: "setup-complete" });
 	});
 
 	function notifyTsServiceExceedSizeLimit() {
@@ -359,7 +356,7 @@ export function startServer(options?: LSOptions) {
 	}
 
 	connection.onExit(() => {
-		// watcher?.dispose();
+		watcher?.dispose();
 	});
 
 	connection.onRenameRequest((req) =>
@@ -385,6 +382,10 @@ export function startServer(options?: LSOptions) {
 	connection.onDidOpenTextDocument((evt) => {
 		const document = docManager.openDocument(evt.textDocument);
 		docManager.markAsOpenedInClient(evt.textDocument.uri);
+		VFS.writeFile(
+			evt.textDocument.uri,
+			docManager.get(evt.textDocument.uri).getText(),
+		);
 		setTimeout(() => diagnosticsManager.scheduleUpdate(document), 0);
 		// console.log;
 	});
@@ -394,10 +395,7 @@ export function startServer(options?: LSOptions) {
 	);
 	connection.onDidChangeTextDocument((evt) => {
 		docManager.updateDocument(evt.textDocument, evt.contentChanges);
-		VFS.writeFile(
-			evt.textDocument.uri,
-			evt.contentChanges.reduce((acc, curr) => (acc += curr.text), ""),
-		);
+
 		pluginHost.didUpdateDocument();
 	});
 	connection.onHover(async (evt) => {

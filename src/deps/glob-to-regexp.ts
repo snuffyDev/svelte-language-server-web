@@ -2,7 +2,6 @@ const osType = (() => {
 	const { navigator } = globalThis;
 	return "linux";
 })();
-import process from "process";
 const isWindows = osType === "windows";
 const SEP = isWindows ? "\\" : "/";
 const SEP_PATTERN = isWindows ? /[\\/]+/ : /\/+/;
@@ -163,9 +162,9 @@ function resolve(...pathSegments) {
 		if (i >= 0) {
 			path = pathSegments[i];
 		} else if (!resolvedDevice) {
-			path = process.cwd?.() || "/";
+			path = "/";
 		} else {
-			path = process.cwd?.() || "/";
+			path =  "/";
 			if (
 				path === undefined ||
 				path.slice(0, 3).toLowerCase() !== `${resolvedDevice.toLowerCase()}\\`

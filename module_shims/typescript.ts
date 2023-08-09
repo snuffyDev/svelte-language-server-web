@@ -1,56 +1,36 @@
-import process from "process";
-process.browser = true;
+/**
+ * @fileoverview
+ * This module is a proxy for the TypeScript import, since TS5 uses ESM now.
+ * We need to control certain aspects of what can be done, what functionality can be used, etc.
+ */
 // @ts-ignore
-import typescript = require("../node_modules/typescript/lib/typescript.js");
+import typescript from "../node_modules/typescript/lib/typescript.js";
 const { createLanguageService: createLanguageService2 } = typescript;
-import {
-	createSystem,
-	createVirtualLanguageServiceHost,
-} from "@typescript/vfs";
 
-const sys = createSystem(new Map());
-console.log({ typescript, default: typescript });
-
-const languageHost = createVirtualLanguageServiceHost(
-	sys,
-	[],
-	typescript.getDefaultCompilerOptions(),
-	typescript,
-);
-
+const sys = typescript.sys;
 let ts = {
 	...typescript,
-	setSys(sys) {
-		//@ts-expect-error
-		typescript.setSys(sys);
-	},
-	createLanguageService(_host, reg, mode) {
-		var host = _host;
-
-		return typescript.createLanguageService.bind(this)(host, reg, mode);
-	},
 	getDefaultLibFilePath() {
-		return "node_modules/typescript/lib/";
+		return "/node_modules/typescript/lib/lib.d.ts";
 	},
+	setSys() {},
 	sys, // ...langService,
 } as Partial<typeof typescript>;
 
 const proxy = new Proxy(ts, {
 	get(target, p, receiver) {
-		// console.log({ receiver });
 		if (p === "default") return receiver;
 		if (!ts[p]) {
 			ts[p] = target[p];
 		}
 		return ts[p] ? ts[p] : target[p];
 	},
-	set(target, p, value, receiver) {
+	set(target, p, value) {
 		if (p === "sys") return true;
 		return Reflect.set(!ts[p] ? ts : target, p, value);
 	},
 });
 
-proxy.host = () => createLanguageService2(languageHost.languageServiceHost);
 export default (() => proxy)();
 
 // export all the typescript stuff from the proxy object
@@ -169,12 +149,3 @@ const { createDocumentRegistry } = proxy;
 export { createDocumentRegistry };
 
 const { createSemanticDiagnosticsBuilderProgram } = proxy;
-
-const obj = {
-	get sys() {
-		return _sys;
-	},
-	set sys(sys) {
-		_setSys(sys);
-	},
-};

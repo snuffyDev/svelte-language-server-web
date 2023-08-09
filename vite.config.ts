@@ -1,19 +1,4 @@
-import { defineConfig, Plugin as VitePlugin } from "vite";
-import { Plugin, PluginBuild } from "esbuild";
-import dts from "vite-plugin-dts";
-import { readdirSync, readFileSync } from "fs";
-import glob from "fast-glob";
-import * as path from "path";
-import { readFile } from "fs/promises";
-import { createRequire } from "module";
-import { nodePolyfills } from "vite-plugin-node-polyfills";
-
-const require = createRequire(import.meta.url);
-const moduleShimmerName = "ModuleShimmer";
-
-interface SourcemapExclude {
-	excludeNodeModules?: boolean;
-}
+import { defineConfig } from "vite";
 
 export default defineConfig({
 	build: {
@@ -24,8 +9,8 @@ export default defineConfig({
 		},
 		sourcemap: false,
 		minify: false,
-		lib: { entry: "dist/index.js", formats: ["es"] },
-		outDir: "../../Documents/GitHub/SvelteLab/src/lib/language_servers/svelte",
+		outDir: "build",
+		// lib: { entry: "dist/index.js", formats: ["es"] },
 	},
 	worker: {
 		rollupOptions: {
@@ -49,7 +34,7 @@ export default defineConfig({
 			minifySyntax: false,
 			minifyIdentifiers: false,
 		},
-		exclude: ["typescript"],
+		exclude: ["./dist/index.js", "./dist/worker.js"],
 		force: true,
 	},
 	preview: {},

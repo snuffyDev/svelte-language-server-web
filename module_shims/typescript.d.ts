@@ -32,4 +32,3 @@ export { createLanguageService, createLanguageServiceSourceFile, createLanguageS
 declare const createDocumentRegistry: typeof typescript.createDocumentRegistry;
 export { createDocumentRegistry };
 declare const createSemanticDiagnosticsBuilderProgram: typeof typescript.createSemanticDiagnosticsBuilderProgram;
-//# sourceMappingURL=typescript.d.ts.map

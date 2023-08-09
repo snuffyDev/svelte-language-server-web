@@ -11,28 +11,39 @@ const osType = (() => {
 })();
 const isWindows = osType === "windows";
 const CHAR_FORWARD_SLASH = 47;
-function assertPath(path) {
+function assertPath(path: any) {
 	if (typeof path !== "string") {
 		throw new TypeError(
 			`Path must be a string. Received ${JSON.stringify(path)}`,
 		);
 	}
 }
-function isPosixPathSeparator(code) {
+function isPosixPathSeparator(code: number) {
 	return code === 47;
 }
-function isPathSeparator(code) {
+function isPathSeparator(code: number) {
 	return isPosixPathSeparator(code) || code === 92;
 }
-function isWindowsDeviceRoot(code) {
+function isWindowsDeviceRoot(code: number) {
 	return (code >= 97 && code <= 122) || (code >= 65 && code <= 90);
 }
-function normalizeString(path, allowAboveRoot, separator, isPathSeparator) {
+function normalizeString(
+	path: string,
+	allowAboveRoot: boolean,
+	separator: string,
+	isPathSeparator: {
+		(code: any): boolean;
+		(code: any): boolean;
+		(code: any): boolean;
+		(code: any): boolean;
+		(arg0: any): any;
+	},
+) {
 	let res = "";
 	let lastSegmentLength = 0;
 	let lastSlash = -1;
 	let dots = 0;
-	let code;
+	let code: number;
 	for (let i = 0, len = path.length; i <= len; ++i) {
 		if (i < len) code = path.charCodeAt(i);
 		else if (isPathSeparator(code)) break;
@@ -86,7 +97,10 @@ function normalizeString(path, allowAboveRoot, separator, isPathSeparator) {
 	}
 	return res;
 }
-function _format(sep, pathObject) {
+function _format(
+	sep: string,
+	pathObject: { dir: any; root: any; base: any; name: any; ext: any },
+) {
 	const dir = pathObject.dir || pathObject.root;
 	const base =
 		pathObject.base || (pathObject.name || "") + (pathObject.ext || "");
@@ -103,12 +117,16 @@ const WHITESPACE_ENCODINGS = {
 	"\u000D": "%0D",
 	"\u0020": "%20",
 };
-function encodeWhitespace(string) {
-	return string.replaceAll(/[\s]/g, (c) => {
+function encodeWhitespace(string: string) {
+	return string.replaceAll(/[\s]/g, (c: string | number) => {
 		return WHITESPACE_ENCODINGS[c] ?? c;
 	});
 }
-function lastPathSegment(path, isSep, start = 0) {
+function lastPathSegment(
+	path: string,
+	isSep: { (code: any): boolean; (code: any): boolean; (arg0: any): any },
+	start = 0,
+) {
 	let matchedNonSeparator = false;
 	let end = path.length;
 	for (let i = path.length - 1; i >= start; --i) {
@@ -124,7 +142,17 @@ function lastPathSegment(path, isSep, start = 0) {
 	}
 	return path.slice(start, end);
 }
-function stripTrailingSeparators(segment, isSep) {
+function stripTrailingSeparators(
+	segment: string,
+	isSep: {
+		(code: any): boolean;
+		(code: any): boolean;
+		(code: any): boolean;
+		(code: any): boolean;
+		(code: any): boolean;
+		(arg0: any): any;
+	},
+) {
 	if (segment.length <= 1) {
 		return segment;
 	}
@@ -138,7 +166,7 @@ function stripTrailingSeparators(segment, isSep) {
 	}
 	return segment.slice(0, end);
 }
-function stripSuffix(name, suffix) {
+function stripSuffix(name: string, suffix: string) {
 	if (suffix.length >= name.length) {
 		return name;
 	}
@@ -151,24 +179,24 @@ function stripSuffix(name, suffix) {
 	return name.slice(0, -suffix.length);
 }
 class DenoStdInternalError extends Error {
-	constructor(message) {
+	constructor(message: string) {
 		super(message);
 		this.name = "DenoStdInternalError";
 	}
 }
-function assert(expr, msg = "") {
+function assert(expr: boolean, msg = "") {
 	if (!expr) {
 		throw new DenoStdInternalError(msg);
 	}
 }
 const sep = "\\";
 const delimiter = ";";
-function resolve(...pathSegments) {
+function resolve(...pathSegments: string[]) {
 	let resolvedDevice = "";
 	let resolvedTail = "";
 	let resolvedAbsolute = false;
 	for (let i = pathSegments.length - 1; i >= -1; i--) {
-		let path;
+		let path: string;
 		const { Deno } = globalThis;
 		if (i >= 0) {
 			path = pathSegments[i];
@@ -262,12 +290,12 @@ function resolve(...pathSegments) {
 	);
 	return resolvedDevice + (resolvedAbsolute ? "\\" : "") + resolvedTail || ".";
 }
-function normalize(path) {
+function normalize(path: string) {
 	assertPath(path);
 	const len = path.length;
 	if (len === 0) return ".";
 	let rootEnd = 0;
-	let device;
+	let device: string;
 	let isAbsolute = false;
 	const code = path.charCodeAt(0);
 	if (len > 1) {
@@ -316,7 +344,7 @@ function normalize(path) {
 	} else if (isPathSeparator(code)) {
 		return "\\";
 	}
-	let tail;
+	let tail: string | any[];
 	if (rootEnd < len) {
 		tail = normalizeString(
 			path.slice(rootEnd),
@@ -349,7 +377,7 @@ function normalize(path) {
 		return device;
 	}
 }
-function isAbsolute(path) {
+function isAbsolute(path: string) {
 	assertPath(path);
 	const len = path.length;
 	if (len === 0) return false;
@@ -363,10 +391,10 @@ function isAbsolute(path) {
 	}
 	return false;
 }
-function join(...paths) {
+function join(...paths: string[]) {
 	const pathsCount = paths.length;
 	if (pathsCount === 0) return ".";
-	let joined;
+	let joined: string;
 	let firstPart = null;
 	for (let i = 0; i < pathsCount; ++i) {
 		const path = paths[i];
@@ -403,7 +431,7 @@ function join(...paths) {
 	}
 	return normalize(joined);
 }
-function relative(from, to) {
+function relative(from: string, to: string) {
 	assertPath(from);
 	assertPath(to);
 	if (from === to) return "";
@@ -476,7 +504,7 @@ function relative(from, to) {
 		return toOrig.slice(toStart, toEnd);
 	}
 }
-function toNamespacedPath(path) {
+function toNamespacedPath(path: string | any[]) {
 	if (typeof path !== "string") return path;
 	if (path.length === 0) return "";
 	const resolvedPath = resolve(path);
@@ -499,7 +527,7 @@ function toNamespacedPath(path) {
 	}
 	return path;
 }
-function dirname(path) {
+function dirname(path: string) {
 	assertPath(path);
 	const len = path.length;
 	if (len === 0) return ".";
@@ -563,7 +591,7 @@ function dirname(path) {
 	}
 	return stripTrailingSeparators(path.slice(0, end), isPosixPathSeparator);
 }
-function basename(path, suffix = "") {
+function basename(path: string, suffix = "") {
 	assertPath(path);
 	if (path.length === 0) return path;
 	if (typeof suffix !== "string") {
@@ -582,7 +610,7 @@ function basename(path, suffix = "") {
 	const strippedSegment = stripTrailingSeparators(lastSegment, isPathSeparator);
 	return suffix ? stripSuffix(strippedSegment, suffix) : strippedSegment;
 }
-function extname(path) {
+function extname(path: string) {
 	assertPath(path);
 	let start = 0;
 	let startDot = -1;
@@ -627,7 +655,7 @@ function extname(path) {
 	}
 	return path.slice(startDot, end);
 }
-function format(pathObject) {
+function format(pathObject: null) {
 	if (pathObject === null || typeof pathObject !== "object") {
 		throw new TypeError(
 			`The "pathObject" argument must be of type Object. Received type ${typeof pathObject}`,
@@ -635,7 +663,7 @@ function format(pathObject) {
 	}
 	return _format("\\", pathObject);
 }
-function parse(path) {
+function parse(path: string) {
 	assertPath(path);
 	const ret = {
 		root: "",
@@ -745,7 +773,7 @@ function parse(path) {
 	} else ret.dir = ret.root;
 	return ret;
 }
-function fromFileUrl(url) {
+function fromFileUrl(url: string | URL) {
 	url = url instanceof URL ? url : new URL(url);
 	if (url.protocol != "file:") {
 		throw new TypeError("Must be a file URL.");
@@ -758,7 +786,7 @@ function fromFileUrl(url) {
 	}
 	return path;
 }
-function toFileUrl(path) {
+function toFileUrl(path: { match: (arg0: RegExp) => [any, any, any] }) {
 	if (!isAbsolute(path)) {
 		throw new TypeError("Must be an absolute path.");
 	}
@@ -794,11 +822,11 @@ const mod = {
 };
 const sep1 = "/";
 const delimiter1 = ":";
-function resolve1(...pathSegments) {
+function resolve1(...pathSegments: any[]) {
 	let resolvedPath = "";
 	let resolvedAbsolute = false;
 	for (let i = pathSegments.length - 1; i >= -1 && !resolvedAbsolute; i--) {
-		let path;
+		let path: string;
 		if (i >= 0) path = pathSegments[i];
 		else {
 			const { Deno } = globalThis;
@@ -825,7 +853,7 @@ function resolve1(...pathSegments) {
 	} else if (resolvedPath.length > 0) return resolvedPath;
 	else return ".";
 }
-function normalize1(path) {
+function normalize1(path: string) {
 	assertPath(path);
 	if (path.length === 0) return ".";
 	const isAbsolute = isPosixPathSeparator(path.charCodeAt(0));
@@ -838,13 +866,13 @@ function normalize1(path) {
 	if (isAbsolute) return `/${path}`;
 	return path;
 }
-function isAbsolute1(path) {
+function isAbsolute1(path: string) {
 	assertPath(path);
 	return path.length > 0 && isPosixPathSeparator(path.charCodeAt(0));
 }
-function join1(...paths) {
+function join1(...paths: any[]) {
 	if (paths.length === 0) return ".";
-	let joined;
+	let joined: string;
 	for (let i = 0, len = paths.length; i < len; ++i) {
 		const path = paths[i];
 		assertPath(path);
@@ -856,7 +884,7 @@ function join1(...paths) {
 	if (!joined) return ".";
 	return normalize1(joined);
 }
-function relative1(from, to) {
+function relative1(from: string, to: string) {
 	assertPath(from);
 	assertPath(to);
 	if (from === to) return "";
@@ -914,10 +942,10 @@ function relative1(from, to) {
 		return to.slice(toStart);
 	}
 }
-function toNamespacedPath1(path) {
+function toNamespacedPath1(path: any) {
 	return path;
 }
-function dirname1(path) {
+function dirname1(path: string) {
 	if (path.length === 0) return ".";
 	let end = -1;
 	let matchedNonSeparator = false;
@@ -936,7 +964,7 @@ function dirname1(path) {
 	}
 	return stripTrailingSeparators(path.slice(0, end), isPosixPathSeparator);
 }
-function basename1(path, suffix = "") {
+function basename1(path: string | any[], suffix = "") {
 	assertPath(path);
 	if (path.length === 0) return path;
 	if (typeof suffix !== "string") {
@@ -951,7 +979,7 @@ function basename1(path, suffix = "") {
 	);
 	return suffix ? stripSuffix(strippedSegment, suffix) : strippedSegment;
 }
-function extname1(path) {
+function extname1(path: string) {
 	assertPath(path);
 	let startDot = -1;
 	let startPart = 0;
@@ -988,7 +1016,7 @@ function extname1(path) {
 	}
 	return path.slice(startDot, end);
 }
-function format1(pathObject) {
+function format1(pathObject: null) {
 	if (pathObject === null || typeof pathObject !== "object") {
 		throw new TypeError(
 			`The "pathObject" argument must be of type Object. Received type ${typeof pathObject}`,
@@ -996,7 +1024,7 @@ function format1(pathObject) {
 	}
 	return _format("/", pathObject);
 }
-function parse1(path) {
+function parse1(path: string) {
 	assertPath(path);
 	const ret = {
 		root: "",
@@ -1007,7 +1035,7 @@ function parse1(path) {
 	};
 	if (path.length === 0) return ret;
 	const isAbsolute = isPosixPathSeparator(path.charCodeAt(0));
-	let start;
+	let start: number;
 	if (isAbsolute) {
 		ret.root = "/";
 		start = 1;
@@ -1072,7 +1100,7 @@ function parse1(path) {
 	} else if (isAbsolute) ret.dir = "/";
 	return ret;
 }
-function fromFileUrl1(url) {
+function fromFileUrl1(url: string | URL) {
 	url = url instanceof URL ? url : new URL(url);
 	if (url.protocol != "file:") {
 		throw new TypeError("Must be a file URL.");
@@ -1081,7 +1109,7 @@ function fromFileUrl1(url) {
 		url.pathname.replace(/%(?![0-9A-Fa-f]{2})/g, "%25"),
 	);
 }
-function toFileUrl1(path) {
+function toFileUrl1(path: string) {
 	if (!isAbsolute1(path)) {
 		throw new TypeError("Must be an absolute path.");
 	}

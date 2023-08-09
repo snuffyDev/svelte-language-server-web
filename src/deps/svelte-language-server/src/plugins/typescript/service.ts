@@ -26,6 +26,7 @@ import {
 	hasTsExtensions,
 } from "./utils";
 import { createVirtualLanguageServiceHost } from "@typescript/vfs";
+import { createLanguageServiceHost } from "module_shims/typescript";
 
 export interface LanguageServiceContainer {
 	readonly tsconfigPath: string;
@@ -242,10 +243,12 @@ async function createLanguageService(
 	let svelteTsPath: string;
 	try {
 		// For when svelte2tsx/svelte-check is part of node_modules, for example VS Code extension
-		svelteTsPath = dirname(require.resolve(docContext.ambientTypesSource));
+		svelteTsPath = require.resolve(docContext.ambientTypesSource);
+		// console.log({ svelteTsPath, docContext: docContext.ambientTypesSource });
 	} catch (e) {
 		// Fall back to dirname
 		svelteTsPath = __dirname;
+		console.warn("Falling back to __dirname");
 	}
 	const VERSION = importSvelte(tsconfigPath || workspacePath).VERSION;
 	const svelteTsxFiles = (
@@ -268,7 +271,6 @@ async function createLanguageService(
 	const host: ts.LanguageServiceHost = {
 		log: (message) => Logger.debug(`[ts] ${message}`),
 		getCompilationSettings: () => compilerOptions,
-		getDefaultLibFileName: () => "/node_modules/typescript/lib",
 		getDirectories: tsSystem.getDirectories,
 		useCaseSensitiveFileNames: () => tsSystem.useCaseSensitiveFileNames,
 		getNewLine: () => tsSystem.newLine,
@@ -277,6 +279,7 @@ async function createLanguageService(
 			getSnapshot(fileName).version.toString(),
 		getScriptSnapshot: getSnapshot,
 		getCurrentDirectory: () => workspacePath,
+		getDefaultLibFileName: ts.getDefaultLibFilePath,
 		fileExists: svelteModuleLoader.fileExists,
 		readFile: svelteModuleLoader.readFile,
 		resolveModuleNames: svelteModuleLoader.resolveModuleNames,
@@ -287,33 +290,7 @@ async function createLanguageService(
 			svelteModuleLoader.resolveTypeReferenceDirectiveReferences,
 	};
 
-	let languageServiceHost = createVirtualLanguageServiceHost(
-		ts.sys,
-		files,
-		compilerOptions,
-		ts,
-	);
-	languageServiceHost.languageServiceHost = {
-		...languageServiceHost.languageServiceHost,
-		getScriptFileNames,
-		getScriptVersion: (fileName: string) =>
-			getSnapshot(fileName).version.toString(),
-		getScriptSnapshot: getSnapshot,
-		getCurrentDirectory: () => workspacePath,
-		fileExists: svelteModuleLoader.fileExists,
-		readFile: (...args) => {
-			return svelteModuleLoader.readFile(...args);
-		},
-		resolveModuleNames: svelteModuleLoader.resolveModuleNames,
-		readDirectory: svelteModuleLoader.readDirectory,
-		getScriptKind: (fileName: string) => getSnapshot(fileName).scriptKind,
-		getProjectVersion: () => projectVersion.toString(),
-		resolveTypeReferenceDirectiveReferences:
-			svelteModuleLoader.resolveTypeReferenceDirectiveReferences,
-	};
-	let languageService = ts.createLanguageService(
-		languageServiceHost.languageServiceHost,
-	);
+	let languageService = ts.createLanguageService(host);
 	const transformationConfig: SvelteSnapshotOptions = {
 		transformOnTemplateError: docContext.transformOnTemplateError,
 		typingsNamespace: raw?.svelteOptions?.namespace || "svelteHTML",

@@ -1,0 +1,7 @@
+{
+	"exports": {
+		"default": "./path-deno.js",
+		"import": "./path-deno.js",
+		"node": "./path-deno.js"
+	}
+}

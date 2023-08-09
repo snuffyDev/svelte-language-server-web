@@ -1,4 +1,8 @@
-export const workerRPCMethods = ["@@setup", "@@add-files"] as const;
+export const workerRPCMethods = [
+	"@@setup",
+	"@@add-files",
+	"@@fetch-types",
+] as const;
 export type WorkerRPCMethod = (typeof workerRPCMethods)[number];
 
 type URI = string;
@@ -12,11 +16,12 @@ type WorkerMessage<T extends WorkerRPCMethod> = {
 type SetupMessage = WorkerMessage<"@@setup">;
 
 type AddFilesMessage = WorkerMessage<"@@add-files">;
+type FetchTypesMessage = WorkerMessage<"@@fetch-types">;
 
-export type { WorkerMessage, SetupMessage, AddFilesMessage };
+export type { FetchTypesMessage, WorkerMessage, SetupMessage, AddFilesMessage };
 
 export const createWorkerMessage = <T extends WorkerRPCMethod>(
-	method: "setup" | "add-files",
+	method: "setup" | "add-files" | "fetch-types",
 	params: WorkerMessage<T>["params"],
 ): WorkerMessage<T> => ({
 	method: `@@${method}` as T,

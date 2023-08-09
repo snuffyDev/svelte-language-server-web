@@ -1,7 +1,7 @@
 import { VFS } from "./../src/vfs";
 import { globToRegExp } from "../src/deps/glob-to-regexp";
-const sync = (glob: string, options) => {
-	const regexp = globToRegExp(glob, {
+const sync = (source: string, options) => {
+	const regexp = globToRegExp(source, {
 		globstar: true,
 		caseInsensitive: true,
 		extended: true,

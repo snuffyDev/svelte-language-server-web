@@ -1,17 +1,16 @@
-import { Logger } from "../../logger.js";
-import "../../../../../prelude.js";
-import "../../../../../global_patches.js";
-// import './../../../../../'
+import { Logger } from "../../logger";
+import { _Function } from "../../../../../global_patches";
 import { CompileOptions } from "svelte/types/compiler/interfaces";
 import { PreprocessorGroup } from "svelte/types/compiler/preprocess";
 import { importSveltePreprocess } from "../../importPackage";
-import _glob from "./../../../../../../module_shims/fast-glob.js";
-import _path from "../../../../path-deno.js";
+import _glob from "fast-glob";
+import _path from "path";
 import _fs from "fs";
-
+import { URL } from "url";
 import { FileMap } from "./fileCollection";
-import { VFS } from "../../../../../vfs.js";
-const pathToFileURL = (url) => _path.posix.toFileUrl(url).pathname;
+
+const pathToFileURL = (url) => _path.posix.toFileUrl(url);
+
 export type InternalPreprocessorGroup = PreprocessorGroup & {
 	/**
 	 * svelte-preprocess has this since 4.x
@@ -64,11 +63,8 @@ export class ConfigLoader {
 
 	constructor(
 		private globSync: typeof _glob.sync,
-		private fs: _fs,
-		private path: Pick<
-			(typeof _path)["posix"],
-			"dirname" | "relative" | "join"
-		>,
+		private fs: Pick<typeof _fs, "existsSync">,
+		private path: Pick<typeof _path, "dirname" | "relative" | "join">,
 		private dynamicImport: typeof _dynamicImport,
 	) {}
 
@@ -95,6 +91,7 @@ export class ConfigLoader {
 				ignore: ["**/node_modules/**", "**/.*/**"],
 				onlyFiles: true,
 			});
+			// console.log({ pathResults });
 			const someConfigIsImmediateFileInDirectory =
 				pathResults.length > 0 &&
 				pathResults.some((res) => !this.path.dirname(res));
@@ -137,7 +134,8 @@ export class ConfigLoader {
 		while (currentDir !== nextDir) {
 			const tryFindConfigPath = (ending: string) => {
 				const path = this.path.join(currentDir, `svelte.config.${ending}`);
-				return this.fs.readFile(path) ? path : undefined;
+				// console.log({ path });
+				return this.fs.existsSync(path) ? path : undefined;
 			};
 			const configPath =
 				tryFindConfigPath("js") ||
@@ -165,20 +163,45 @@ export class ConfigLoader {
 
 	private async loadConfig(configPath: string, directory: string) {
 		try {
-			console.log({ configPath, directory });
-			const parseConfig = () => {
-				const file = VFS.readFile("file:///svelte.config.js");
-				const hasExport = file.match(/export default/g).length;
-				if (hasExport) {
-					const startExport = file.lastIndexOf("export default");
-					const startCb = file.slice(startExport).indexOf("{");
-					const endCb = file.lastIndexOf("}");
-					return file;
-				}
-				return "{}";
-			};
-			let config = this.disabled ? {} : {};
+			const configFile = this.fs.readFileSync(configPath);
+			const processor = {};
+			const reqPreProcess = globalThis.__importDefault(`svelte-preprocess`);
+			for (const key in reqPreProcess.default) {
+				processor[key] = `${reqPreProcess.default[key].toString()}`;
+			}
+			console.log({ processor });
+			// convert processor to a base64 string, while keeping the functions intact
+			const processorString = `export default () => (${JSON.stringify(
+				processor,
+			)})`;
+			console.log({ processorString });
+			// convert the base64 string into a data url
 
+			// convert the data url into a object url
+			const processorObjectUrl = globalThis.URL.createObjectURL(
+				new Blob([processorString], { type: "application/javascript" }),
+			);
+			/** @vite-ignore */
+
+			let config = this.disabled
+				? {}
+				: (
+						await import(
+							`data:application/javascript;base64,${btoa(
+								configFile.replace(
+									"'svelte-preprocess';",
+									`'${processorObjectUrl}';`,
+								),
+							)}`
+						)
+				  )?.default;
+			// console.log({ config });		if (args.join("") === "modulePathreturn import(modulePath)")
+
+			for (const key in config.preprocess) {
+				config.preprocess[key] = new Function(
+					"return " + config.preprocess[key],
+				)();
+			}
 			if (!config) {
 				throw new Error(
 					'Missing exports in the config. Make sure to include "export default config" or "module.exports = config"',
@@ -251,7 +274,10 @@ export class ConfigLoader {
 		const fileDirectory = this.path.dirname(file);
 		const configPath = this.searchConfigPathUpwards(fileDirectory);
 		if (configPath) {
-			await this.loadAndCacheConfig(configPath, fileDirectory);
+			await this.loadAndCacheConfig(
+				fileDirectory + "svelte.config.js",
+				fileDirectory,
+			);
 		} else {
 			this.addFallbackConfig(fileDirectory);
 		}
@@ -284,35 +310,45 @@ export class ConfigLoader {
 				: "No svelte.config.js found. ") +
 				"Using https://github.com/sveltejs/svelte-preprocess as fallback",
 		);
-		const sveltePreprocess = importSveltePreprocess(path);
-		return {
-			preprocess: sveltePreprocess({
-				// 4.x does not have transpileOnly anymore, but if the user has version 3.x
-				// in his repo, that one is loaded instead, for which we still need this.
-				typescript: <any>{
-					transpileOnly: true,
-					compilerOptions: { sourceMap: true, inlineSourceMap: false },
-				},
-				globalStyle: true,
-				scss: true,
-			}),
-			isFallbackConfig: true,
-		};
+		try {
+			const sveltePreprocess = importSveltePreprocess(path);
+			return {
+				preprocess: sveltePreprocess({
+					// 4.x does not have transpileOnly anymore, but if the user has version 3.x
+					// in his repo, that one is loaded instead, for which we still need this.
+					typescript: <any>{
+						transpileOnly: true,
+						compilerOptions: { sourceMap: true, inlineSourceMap: false },
+					},
+				}),
+				isFallbackConfig: true,
+			};
+		} catch {
+			return {
+				preprocess: require("svelte-preprocess")({
+					// 4.x does not have transpileOnly anymore, but if the user has version 3.x
+					// in his repo, that one is loaded instead, for which we still need this.
+					typescript: <any>{
+						transpileOnly: true,
+						compilerOptions: { sourceMap: true, inlineSourceMap: false },
+					},
+				}),
+				isFallbackConfig: true,
+			};
+		}
 	}
 }
 
 export const configLoader = new ConfigLoader(
 	_glob.sync,
 	_fs,
-	_path.posix,
+	_path,
 	_dynamicImport,
 );
-
-console.log(configLoader);
 
 export const setConfigLoader = (
 	key: keyof typeof configLoader,
 	value: Function,
 ) => (configLoader[key] = value);
 
-export default configLoader;
+// console.log({ configLoader });
