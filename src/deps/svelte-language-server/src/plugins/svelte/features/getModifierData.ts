@@ -1,5 +1,4 @@
 import { MarkupContent, MarkupKind } from "vscode-languageserver/browser";
-
 export interface ModifierData {
 	modifier: string;
 	documentation: MarkupContent;

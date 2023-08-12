@@ -60,12 +60,13 @@ class FSWatcherImpl extends EventEmitter.EventEmitter implements _FSWatcher {
 	private handleFileChange(eventType: string, changedPath: string) {
 		console.log(eventType, changedPath);
 
-		if (changedPath === this.path && this.listener) {
+		if (
+			(changedPath !== "/" && this.path.startsWith(changedPath)) ||
+			changedPath === this.path
+		) {
 			const filename = changedPath;
-			const eventType = "change";
-			this.listener(eventType, filename);
+			this.listener(eventType as never, filename);
 			this.emit(eventType, filename);
-			VFS.emit("change", filename);
 		}
 	}
 }
@@ -115,12 +116,14 @@ class VFSImpl {
 
 	// VFS Methods
 	public static createDirectory(path: string) {
+		// console.log({ createDirectory: path });
 		this.emit("change", _path.posix.dirname(VFSImpl.normalize(path)));
 
 		return directories.add(VFSImpl.normalize(path));
 	}
 
 	public static directoryExists(path: string) {
+		// console.log({ directoryExists: path });
 		return directories.has(VFSImpl.normalize(path));
 	}
 
@@ -129,27 +132,38 @@ class VFSImpl {
 	}
 
 	public static getCurrentDirectory = () => {
+		// console.log({ getCurrentDirectory: "/" });
+
 		return "/";
 	};
 
 	public static getExecutingFilePath = () => {
-		return process.execPath;
+		return "/" || process.execPath;
 	};
 
 	public static fileExists(path: string) {
+		if (!path.includes("node_modules")) {
+			// console.error(new Error(path).stack);
+			// console.log({
+			// 	fileExists: path,
+			// 	exists: sys.has(VFSImpl.normalize(path)),
+			// });
+		}
 		return sys.has(VFSImpl.normalize(path));
 	}
 
 	public static getDirectories(path: string) {
-		console.log([...directories.keys()]);
+		// console.log([...directories.keys()]);
 		return [...directories.keys()];
 	}
 
 	public static normalize(path: string) {
-		return _path.posix.fromFileUrl(
-			path.startsWith("file:///")
-				? path
-				: new URL(_path.posix.toFileUrl(_path.posix.resolve(path))),
+		return _path.posix.normalize(
+			_path.posix.fromFileUrl(
+				path.startsWith("file:///")
+					? path
+					: new URL(_path.posix.toFileUrl(_path.posix.resolve(path))),
+			),
 		);
 	}
 
@@ -178,7 +192,7 @@ class VFSImpl {
 				);
 			})
 			.filter(Boolean);
-		console.log({ path, test });
+		// console.log({ path, test });
 
 		return test;
 	}
@@ -189,7 +203,7 @@ class VFSImpl {
 				sys.get(VFSImpl.normalize(path)) ||
 				sys.get(VFSImpl.normalize(path.replace("/", "/node_modules/lib/lib.")));
 
-			console.log({ path, encoding, test });
+			// console.log({ path, encoding, test });
 			return encoding?.startsWith("utf")
 				? test
 				: encoding
@@ -214,13 +228,22 @@ class VFSImpl {
 		data: string,
 		writeByteOrderMark?: boolean,
 	) {
-		directories.add(_path.posix.dirname(VFSImpl.normalize(path)));
+		const normalizedPath = VFSImpl.normalize(path);
+		directories.add(_path.posix.dirname(normalizedPath));
+
 		// Find the root `tsconfig`
 		// TODO: jsconfig support
-		if (VFS.normalize(path).startsWith("/tsconfig.json")) {
+		if (
+			normalizedPath.startsWith("/tsconfig.json") ||
+			normalizedPath.startsWith("/jsconfig.json")
+		) {
 			try {
 				const tsconfig = JSON.parse(
-					Buffer.from(data as string).toString("utf-8"),
+					Buffer.from(data as string)
+						.toString("utf-8")
+						.replace(/\\"|"(?:\\"|[^"])*"|(\/\/.*|\/\*[\s\S]*?\*\/)/g, (m, g) =>
+							g ? "" : m,
+						),
 				);
 				VFS.tsConfig = tsconfig;
 				VFS.tsConfigPaths = tsconfig.compilerOptions.paths || {};
@@ -229,8 +252,7 @@ class VFSImpl {
 				console.debug({ path, data, writeByteOrderMark });
 			}
 		}
-		this.emit("change", _path.posix.dirname(VFSImpl.normalize(path)));
-		return sys.set(_path.posix.normalize(VFSImpl.normalize(path)), data);
+		return sys.set(normalizedPath, data);
 	}
 }
 

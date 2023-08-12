@@ -21,7 +21,7 @@ import {
 } from "./service";
 import { GlobalSnapshotsManager, SnapshotManager } from "./SnapshotManager";
 import { isSubPath } from "./utils";
-import { VFS } from "../../../../../vfs";
+import { writeFileSync } from "fs";
 
 interface LSAndTSDocResolverOptions {
 	notifyExceedSizeLimit?: () => void;
@@ -83,7 +83,7 @@ export class LSAndTSDocResolver {
 			text: content,
 			uri,
 		});
-		VFS.writeFile(uri, content);
+		writeFileSync(uri, content);
 		this.docManager.lockDocument(uri);
 		return document;
 	};

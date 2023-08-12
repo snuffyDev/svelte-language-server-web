@@ -10,7 +10,6 @@ import { parseHtml } from "./parseHtml";
 import { SvelteConfig, configLoader } from "./configLoader";
 import { HTMLDocument } from "vscode-html-languageservice";
 import { Range } from "vscode-languageserver/browser";
-
 /**
  * Represents a text document contains a svelte component.
  */

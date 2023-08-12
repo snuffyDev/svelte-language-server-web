@@ -226,6 +226,7 @@ function preprocessSvelteFile(
 	let text = document.getText();
 	let exportedNames: IExportedNames = { has: () => false };
 	let htmlAst: TemplateNode | undefined;
+
 	const scriptKind = [
 		getScriptKindFromAttributes(document.scriptInfo?.attributes ?? {}),
 		getScriptKindFromAttributes(document.moduleScriptInfo?.attributes ?? {}),
@@ -235,7 +236,7 @@ function preprocessSvelteFile(
 
 	try {
 		const tsx = svelte2tsx(text, {
-			filename: document.url ?? undefined,
+			filename: document.getFilePath() ?? undefined,
 			isTsFile: scriptKind === ts.ScriptKind.TS,
 			mode: "ts",
 			typingsNamespace: options.typingsNamespace,

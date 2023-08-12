@@ -107,25 +107,6 @@ globalThis._importScripts = function (...args: any[]) {
 	console.error("Trying to import a script", args);
 };
 
-globalThis._Buffer = Buffer.Buffer;
-
-const compilerOptions = {
-	...ts.getDefaultCompilerOptions(),
-	strict: true,
-	esModuleInterop: true,
-	lib: ["DOM", "DOM.iterable", "ESNext", "ES2020"],
-	module: "esnext",
-	target: "esnext",
-	suppressOutputPathCheck: true,
-	skipDefaultLibCheck: true,
-	moduleResolution: "Node",
-	useCaseSensitiveFileNames: false,
-	allowJs: true,
-} as const;
-
-// setConfigLoader("getConfig", (_x) => conf);
-// setConfigLoader("awaitConfig", (_x) => conf);
-
 const required = {
 	"prettier/package.json": { version: prettierVersion },
 	"svelte/package.json": { version: svelteVersion },
@@ -156,6 +137,7 @@ const required = {
 	"/prettier": prettier,
 	"/prettier/": prettier,
 };
+
 console.log({ required });
 globalThis.__importDefault = function (req) {
 	return { default: require(req) };
@@ -164,10 +146,9 @@ globalThis.__importDefault = function (req) {
 // @ts-expect-error patching require.resolve
 globalThis.require.resolve = (x) =>
 	path.resolve(x.includes("node_modules") ? x : `/node_modules/${x}`);
-
 globalThis.importSvelte = required["svelte/compiler"];
 globalThis.importSveltePreprocess = () => required["svelte-preprocess"];
-globalThis.importPrettier = required["prettier"];
+
 const throwIfRequire = {
 	"./node_modules/@microsoft/typescript-etw": true,
 	"svelte-native/package.json": true,

@@ -17,6 +17,7 @@
 		"noResolve": false,
 		"declarationDir": "./dist",
 		"rootDirs": ["src", "src/deps", "src/deps/svelte-language-server"],
+		"types": [],
 		"baseUrl": ".",
 		"declaration": true,
 		"declarationMap": true,

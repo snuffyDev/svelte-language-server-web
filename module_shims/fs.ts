@@ -1,4 +1,4 @@
-import { Dirent, Stats, type WatchOptions } from "fs";
+import { Dirent, Stats, type WatchOptions, watch__watchfile } from "fs";
 
 //@ts-ignore
 import { resolve } from "../src/deps/path-deno";
@@ -360,7 +360,17 @@ function lstatSync(path: string | Buffer | URL): Stats {
 		birthtime: new Date(),
 	};
 }
-const { watchFile } = VFS;
+function watchFile(
+	path: string | Buffer | URL,
+	options: object | Function,
+	listener?: Function,
+): void {
+	VFS.on("change", (event, filename) => {
+		if (filename === VFS.normalize(path.toString())) {
+			listener?.(event, filename);
+		}
+	});
+}
 function fstatSync(fd: number): Stats {
 	// Not supported in the vfs, but can be implemented if needed.
 	throw new Error("fstatSync is not supported in the vfs");

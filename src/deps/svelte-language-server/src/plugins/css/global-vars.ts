@@ -1,17 +1,9 @@
-// import { watch, FSWatcher } from "chokidar";
-import { VFS } from "../../../../../vfs";
-const { readFile: _readFile } = VFS;
-const readFile = (path: string, cb: (file: string) => void) => {
-	cb(_readFile(null, path));
-};
+import { watch, FSWatcher } from "chokidar";
+import { readFile } from "fs";
 import { isNotNullOrUndefined, flatten } from "../../utils";
 
 const varRegex = /^\s*(--\w+.*?):\s*?([^;]*)/;
-// const watch = (...args) => {
-// 	return {
-// 		addListener(...args) {},
-// 	};
-// };
+
 export interface GlobalVar {
 	name: string;
 	filename: string;
@@ -31,6 +23,7 @@ export class GlobalVars {
 			this.fsWatcher.close();
 			this.globalVars.clear();
 		}
+
 		this.fsWatcher = watch(filesToWatch.split(","))
 			.addListener("add", (file) => this.updateForFile(file))
 			.addListener("change", (file) => {

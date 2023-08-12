@@ -8,7 +8,6 @@ import {
 	CompletionList,
 	CompletionContext,
 } from "vscode-languageserver/browser";
-
 /**
  * from https://github.com/microsoft/vscode/blob/157255fa4b0775c5ab8729565faf95927b610cac/extensions/typescript-language-features/src/languageFeatures/directiveCommentCompletions.ts#L19
  */

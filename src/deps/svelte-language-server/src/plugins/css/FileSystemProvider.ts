@@ -1,5 +1,4 @@
-import { stat, Stats } from "fs";
-import { readdir } from "fs";
+import { stat, readdir, Stats } from "fs";
 import { promisify } from "util";
 import {
 	FileStat,

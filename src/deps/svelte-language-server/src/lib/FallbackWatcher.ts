@@ -1,6 +1,5 @@
 import { FSWatcher, watch } from "chokidar";
-// console.log(chokidar);
-import { debounce } from "lodash-es";
+import { debounce } from "lodash";
 import { join, posix } from "path";
 import {
 	DidChangeWatchedFilesParams,
@@ -12,8 +11,9 @@ import { pathToUrl } from "../utils";
 type DidChangeHandler = (para: DidChangeWatchedFilesParams) => void;
 
 const DELAY = 50;
+
 export class FallbackWatcher {
-	private readonly watcher: ReturnType<typeof watch>;
+	private readonly watcher: FSWatcher;
 	private readonly callbacks: DidChangeHandler[] = [];
 
 	private undeliveredFileEvents: FileEvent[] = [];
@@ -35,7 +35,7 @@ export class FallbackWatcher {
 				ignorePermissionErrors: true,
 			},
 		);
-		console.log(this.watcher);
+
 		this.watcher
 			.on("add", (path) => this.onFSEvent(path, FileChangeType.Created))
 			.on("unlink", (path) => this.onFSEvent(path, FileChangeType.Deleted))
@@ -51,7 +51,7 @@ export class FallbackWatcher {
 
 	private onFSEvent(path: string, type: FileChangeType) {
 		const fileEvent = this.convert(path, type);
-		console.log({ path, type, fileEvent });
+
 		this.undeliveredFileEvents.push(fileEvent);
 		this.scheduleTrigger();
 	}

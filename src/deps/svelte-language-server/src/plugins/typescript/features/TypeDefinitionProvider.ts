@@ -1,4 +1,4 @@
-import { Position, Location } from "vscode-languageserver-protocol/browser";
+import { Position, Location } from "vscode-languageserver-protocol";
 import { Document, mapLocationToOriginal } from "../../../lib/documents";
 import { isNotNullOrUndefined } from "../../../utils";
 import { TypeDefinitionProvider } from "../../interfaces";

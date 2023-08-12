@@ -5,7 +5,7 @@ import { EditorView, hoverTooltip, keymap } from "@codemirror/view";
 import { EditorState, Extension } from "@codemirror/state";
 import { vscodeKeymap } from "@replit/codemirror-vscode-keymap";
 import { svelte } from "@replit/codemirror-lang-svelte";
-import PostMessageWorkerTransport from "./src/transport";
+import { SvelteWorkerRPC } from "./dist";
 
 import {
 	LanguageServerClient,
@@ -144,11 +144,7 @@ const init_files = {
 			"rollup-plugin-cjs": "^1.0.0",
 			"sass": "^1.64.1",
 			"source-map": "^0.7.4",
-			"svelte": "^4.0.5",
-			"svelte-check": "^3.4.6",
-			"svelte-preprocess": "^5.0.4",
-			"svelte2tsx": "^0.6.19",
-			"typescript": "^5.1.6",
+
 			"vite": "^4.3.9",
 			"vite-plugin-dts": "^3.2.0",
 			"vite-plugin-node-polyfills": "^0.9.0",
@@ -257,30 +253,17 @@ const files = {
 };
 
 (async () => {
-	let transport: PostMessageWorkerTransport;
-	let ls: LanguageServerClient;
-	await new Promise((resolve) => {
-		svelteWorker.onmessage = (e) => {
-			if (e.data.method === "fetch-types-complete") {
-				setTimeout(() => {
-					svelteWorker.postMessage({ method: "@@setup", params: init_files });
-					e.data.method === "fetch-types-complete" && resolve(undefined);
-					transport = new PostMessageWorkerTransport(svelteWorker);
-					ls = new LanguageServerClient({
-						transport,
-						rootUri: null,
-						documentUri: "",
-						languageId: "",
-						workspaceFolders: null,
-					});
-				}, 100);
-			}
-		};
-		svelteWorker.postMessage({
-			method: "@@fetch-types",
-			params: JSON.parse(init_files["file:///package.json"]),
-		});
+	let svelteLanguageServer = new SvelteWorkerRPC(svelteWorker, {
+		rootUri: null,
+		workspaceFolders: null,
+		allowHTMLContent: true,
+		autoClose: false,
+		languageId: "",
 	});
+	await svelteLanguageServer.fetchTypes(
+		JSON.parse(init_files["file:///package.json"]),
+	);
+	await svelteLanguageServer.setup(init_files);
 
 	const states = new Map<`/${keyof typeof files}`, EditorState>();
 
@@ -301,14 +284,14 @@ const files = {
 				basicSetup,
 				watcher,
 				languageServerWithTransport({
-					transport,
+					transport: svelteLanguageServer,
 					documentUri: uri,
 					languageId: "svelte",
 					workspaceFolders: null,
-					rootUri: uri.includes("Comp") ? "file:///" : "file:///",
+					rootUri: null,
 					allowHTMLContent: true,
 					autoClose: false,
-					client: ls,
+					client: svelteLanguageServer.client(),
 				}),
 				keymap.of(vscodeKeymap),
 				oneDark,
@@ -359,6 +342,11 @@ const files = {
 		code = files["Comp1.svelte"];
 
 		const newState = states.get("file:///src/lib/Comp1.svelte");
+		svelteLanguageServer.client().notify("$/onDidChangeTsOrJsFile", {
+			changes: [
+				{ from: 0, to: code.length, insert: editor.state.doc.toString() },
+			],
+		});
 		editor.setState(newState!);
 		editor.dispatch({
 			changes: { from: 0, to: editor.state.doc.length, insert: code },
@@ -367,6 +355,4 @@ const files = {
 
 	// Current document to display in the editor
 	code = files["App.svelte"];
-
-	// editor.dispatch({ changes: { to: 0, from: 0, insert: code } });
 })();

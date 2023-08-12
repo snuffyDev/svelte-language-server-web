@@ -13,6 +13,7 @@ import type {
 	FetchTypesMessage,
 	SetupMessage,
 	WorkerRPCMethod,
+	WorkerResponse,
 } from "./messages";
 import { fetchTypeDefinitionsFromCDN } from "./features/autoTypings";
 
@@ -57,6 +58,8 @@ addEventListener("error", (e) => console.error(e));
  * ```
  */
 export const SvelteLanguageWorker = () => {
+	const setupQueue = [];
+
 	const isRPCMessage = (
 		data: unknown,
 	): data is SetupMessage | FetchTypesMessage | AddFilesMessage =>
@@ -77,18 +80,32 @@ export const SvelteLanguageWorker = () => {
 				}
 			});
 		};
+		addEventListener("setup-completed", (event) => {
+			console.log({ event });
+			const id = setupQueue.shift();
 
+			if (typeof id === "number") {
+				postMessage({ id, method: "@@setup", complete: true });
+			}
+		});
 		addEventListener("message", async (event) => {
 			// Process our custom RPC messages
 			if (isRPCMessage(event.data)) {
 				if (event.data.method === "@@fetch-types") {
 					console.log({ event, json: event.data.params });
-					await handleFetchTypes(event.data).then(() => {
-						postMessage({ method: "fetch-types-complete" });
-					});
+					await handleFetchTypes(event.data)
+						.then(() => {
+							postMessage({
+								method: "@@fetch-types",
+								id: event.data.id,
+								complete: true,
+							} as WorkerResponse<"@@fetch-types">);
+						})
+						.catch(console.error);
 					return;
 				}
 
+				console.log({ event, json: event.data.params });
 				await new Promise<void>((resolve) => {
 					const fileNames = Object.keys(event.data.params);
 					for (let i = 0; i < fileNames.length; i++) {
@@ -104,9 +121,13 @@ export const SvelteLanguageWorker = () => {
 
 				if (event.data.method === "@@setup") {
 					console.log("Setting up Svelte Language Server...");
-					queueMicrotask(() => {
-						startServer({ connection: conn });
-					});
+					setupQueue.push(event.data.id);
+					startServer({ connection: conn });
+					postMessage({
+						method: "@@setup",
+						id: event.data.id,
+						complete: true,
+					} as WorkerResponse<"@@setup">);
 				}
 			}
 		});

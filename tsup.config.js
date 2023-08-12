@@ -106,8 +106,9 @@ const moduleShimmer = {
         };
       },
     );
-    build.onLoad({ filter: /.*/ }, (args) => {
+    build.onLoad({ filter: /.*/, namespace: moduleShimmerName }, (args) => {
       const contents = moduleShims[args.path];
+
       return { contents, loader: "ts", resolveDir: "node_modules" };
     });
   },
@@ -123,7 +124,7 @@ function createAliasPlugin(aliasConfig) {
         replacement,
       }));
       // Handle the transform step
-      build.onLoad({ filter: /.*/ }, async (args) => {
+      build.onLoad({ filter: /.*/, namespace: moduleShimmerName}, async (args) => {
         // Read the original file content
         const source = await readFile(args.path, "utf8");
         // Apply each alias in order
@@ -249,17 +250,13 @@ export default defineConfig({
 		importSvelte: "_importSvelte",
 		importSveltePreprocess: "_importSveltePreprocess",
 		importPrettier: "_importPrettier",
-		sorcery_1: "_sorceryShim",
-		__importStar: "__importStar",
-
-		__importDefault: "__importDefault",
 	}
   },banner: {
     js: `const __filename = new URL(import.meta.url).pathname;`
   },
   sourcemap: true,
   platform: "browser",
-  external: ["@codemirror/state", "net"],
+  external: ["@codemirror/state"],
   // outdir: DIST_DIR,
   outDir: OUT_DIR,
   noExternal:[/.*/],

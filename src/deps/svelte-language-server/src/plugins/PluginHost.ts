@@ -1,5 +1,5 @@
-import { flatten } from "lodash-es";
-
+import { flatten } from "lodash";
+import { performance } from "perf_hooks";
 import {
 	CallHierarchyIncomingCall,
 	CallHierarchyItem,

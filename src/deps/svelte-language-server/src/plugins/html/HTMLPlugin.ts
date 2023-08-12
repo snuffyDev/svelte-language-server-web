@@ -1,11 +1,11 @@
-import { doComplete as doEmmetComplete } from "@vscode/emmet-helper/lib/esm/emmetHelper";
+import { doComplete as doEmmetComplete } from "@vscode/emmet-helper";
 import {
 	getLanguageService,
 	HTMLDocument,
 	CompletionItem as HtmlCompletionItem,
 	Node,
 	newHTMLDataProvider,
-} from "vscode-html-languageservice/lib/esm/htmlLanguageService.js";
+} from "vscode-html-languageservice";
 import {
 	CompletionList,
 	Hover,

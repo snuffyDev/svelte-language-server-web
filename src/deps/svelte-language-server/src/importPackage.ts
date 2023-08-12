@@ -26,34 +26,25 @@ function dynamicRequire(dynamicFileToRequire: string): any {
 }
 
 export function getPackageInfo(packageName: string, fromPath: string) {
-	try {
-		const paths = [__dirname];
-		if (isTrusted) {
-			paths.unshift(fromPath);
-		}
-		const packageJSONPath = require.resolve(`${packageName}/package.json`, {
-			paths,
-		});
-		const { version } = dynamicRequire(packageJSONPath);
-		const [major, minor, patch] = version.split(".");
-
-		return {
-			path: dirname(packageJSONPath),
-			version: {
-				full: version,
-				major: Number(major),
-				minor: Number(minor),
-				patch: Number(patch),
-			},
-		};
-	} catch (error) {
-		console.error(error);
-		console.log({
-			packageName,
-			fromPath,
-			r: require.resolve(`${packageName}/package.json`),
-		});
+	const paths = [__dirname];
+	if (isTrusted) {
+		paths.unshift(fromPath);
 	}
+	const packageJSONPath = require.resolve(`${packageName}/package.json`, {
+		paths,
+	});
+	const { version } = dynamicRequire(packageJSONPath);
+	const [major, minor, patch] = version.split(".");
+
+	return {
+		path: dirname(packageJSONPath),
+		version: {
+			full: version,
+			major: Number(major),
+			minor: Number(minor),
+			patch: Number(patch),
+		},
+	};
 }
 
 export function importPrettier(fromPath: string): typeof prettier {

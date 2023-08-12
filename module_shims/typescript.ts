@@ -4,7 +4,7 @@
  * We need to control certain aspects of what can be done, what functionality can be used, etc.
  */
 // @ts-ignore
-import typescript from "../node_modules/typescript/lib/typescript.js";
+import typescript from "../node_modules/typescript/lib/tsserverlibrary.js";
 const { createLanguageService: createLanguageService2 } = typescript;
 
 const sys = typescript.sys;

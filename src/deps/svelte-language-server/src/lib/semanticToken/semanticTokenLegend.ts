@@ -3,7 +3,6 @@ import {
 	SemanticTokenModifiers,
 	SemanticTokenTypes,
 } from "vscode-languageserver/browser";
-
 /**
  * extended from https://github.com/microsoft/TypeScript/blob/35c8df04ad959224fad9037e340c1e50f0540a49/src/services/classifier2020.ts#L9
  * so that we don't have to map it into our own legend

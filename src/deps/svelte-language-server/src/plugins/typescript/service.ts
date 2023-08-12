@@ -1,7 +1,6 @@
-import { posix } from "./../../../../path-deno";
-const { basename, dirname, resolve } = posix;
+import { basename, dirname, resolve } from "path";
 import ts from "typescript";
-import { TextDocumentContentChangeEvent } from "vscode-languageserver-protocol/browser";
+import { TextDocumentContentChangeEvent } from "vscode-languageserver-protocol";
 import { getPackageInfo, importSvelte } from "../../importPackage";
 import { Document } from "../../lib/documents";
 import { configLoader } from "../../lib/documents/configLoader";
@@ -25,8 +24,6 @@ import {
 	getNearestWorkspaceUri,
 	hasTsExtensions,
 } from "./utils";
-import { createVirtualLanguageServiceHost } from "@typescript/vfs";
-import { createLanguageServiceHost } from "module_shims/typescript";
 
 export interface LanguageServiceContainer {
 	readonly tsconfigPath: string;
@@ -248,7 +245,6 @@ async function createLanguageService(
 	} catch (e) {
 		// Fall back to dirname
 		svelteTsPath = __dirname;
-		console.warn("Falling back to __dirname");
 	}
 	const VERSION = importSvelte(tsconfigPath || workspacePath).VERSION;
 	const svelteTsxFiles = (
@@ -271,9 +267,6 @@ async function createLanguageService(
 	const host: ts.LanguageServiceHost = {
 		log: (message) => Logger.debug(`[ts] ${message}`),
 		getCompilationSettings: () => compilerOptions,
-		getDirectories: tsSystem.getDirectories,
-		useCaseSensitiveFileNames: () => tsSystem.useCaseSensitiveFileNames,
-		getNewLine: () => tsSystem.newLine,
 		getScriptFileNames,
 		getScriptVersion: (fileName: string) =>
 			getSnapshot(fileName).version.toString(),
@@ -284,8 +277,11 @@ async function createLanguageService(
 		readFile: svelteModuleLoader.readFile,
 		resolveModuleNames: svelteModuleLoader.resolveModuleNames,
 		readDirectory: svelteModuleLoader.readDirectory,
+		getDirectories: tsSystem.getDirectories,
+		useCaseSensitiveFileNames: () => tsSystem.useCaseSensitiveFileNames,
 		getScriptKind: (fileName: string) => getSnapshot(fileName).scriptKind,
 		getProjectVersion: () => projectVersion.toString(),
+		getNewLine: () => tsSystem.newLine,
 		resolveTypeReferenceDirectiveReferences:
 			svelteModuleLoader.resolveTypeReferenceDirectiveReferences,
 	};
