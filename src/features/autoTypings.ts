@@ -57,17 +57,36 @@ export class PromisePool {
 }
 
 const pool = new PromisePool(20);
+const numberRegex = /[^\d\.]/gm;
+let packageRetryTracker = {};
 
-const HEAD_REQUEST = (name: string, version: string) => {
-	return fetch(`https://cdn.skypack.dev/${name}@${version}?dts`, {
-		method: "HEAD",
-	})
-		.then(({ headers }) => {
-			return headers.get("x-typescript-types");
+const HEAD_REQUEST = (packageName: string, version: string) => {
+	if (packageRetryTracker[packageName] > 2) {
+		return null;
+	}
+	packageRetryTracker[packageName] = packageRetryTracker[packageName] || 0;
+	return fetch(
+		`https://data.jsdelivr.com/v1/packages/npm/${packageName}${
+			version ? `@${version}` : ""
+		}?structure=flat`,
+	)
+		.then(async (res) => {
+			if (res.status >= 400) {
+				packageRetryTracker[packageName]++;
+
+				return HEAD_REQUEST(packageName, "");
+			}
+			const { files } = await res.json();
+			return files
+				.filter((file) => file?.name.includes(".d.ts"))
+				.map(({ name }) => `npm/${packageName}@${version}${name}`)
+				.join(",");
 		})
 		.then((path) => {
 			if (path) {
-				return fetch(`https://cdn.skypack.dev${path}`).then((r) => r.text());
+				return fetch(`https://cdn.jsdelivr.net/combine/${path}`).then((r) =>
+					r.text(),
+				);
 			}
 			return null;
 		});
@@ -94,7 +113,7 @@ export const fetchTypeDefinitionsFromCDN = async (packageJSON: PackageJSON) => {
 		Object.keys(dependencies).map((name) =>
 			pool.add(async () => {
 				const version = dependencies[name];
-				const text = await HEAD_REQUEST(name, version);
+				const text = await HEAD_REQUEST(name, version.replace(numberRegex, ""));
 				if (text) {
 					return [name, text];
 				}
@@ -102,6 +121,6 @@ export const fetchTypeDefinitionsFromCDN = async (packageJSON: PackageJSON) => {
 		),
 	);
 	console.log(types);
-
+	packageRetryTracker = {};
 	return (types || []).filter(Boolean) as [pkgName: string, dts: string][];
 };

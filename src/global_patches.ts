@@ -6,6 +6,7 @@ import * as Buffer from "buffer/";
 
 //@ts-ignore
 import _ts from "typescript";
+//@ts-ignore
 const ts = _ts.default;
 
 import preprocess from "svelte-preprocess/dist/autoProcess.js";

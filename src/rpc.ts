@@ -14,6 +14,9 @@ type LanguageServerClientOptions = Exclude<
 	"transport"
 >;
 
+// create a fully typed package.json type
+type PackageJson = Record<string, unknown>;
+
 interface ITransportEvents {
 	error: (data: JSONRPCError) => void;
 	notification: (data: IJSONRPCNotificationResponse) => void;
@@ -27,6 +30,28 @@ type Files = Record<FileName, FileContents>;
 
 /**
  * A class that wraps the Worker and provides a simple RPC interface.
+ *
+ * @example
+ * C
+ * ```ts
+ * const svelteRpc = new WorkerRPC("/path/to/worker.js", {
+ * 	languageId: "svelte",
+ * 	rootUri: "/",
+ * });
+ *
+ * worker.fetchTypes("
+ * worker.addFiles({
+ * 	"App.svelte": `<script>let foo = "bar";</script><p>{foo}</p>`,
+ * });
+ *
+ * worker.fetchTypes("App.svelte").then((success) => {
+ * 	if (success) {
+ * 		const client = worker.client();
+ * 		const diagnostics = client.getDiagnostics("App.svelte");
+ * 		console.log(diagnostics);
+ * 	}
+ * });
+ * ```
  */
 // @ts-expect-error
 export class WorkerRPC extends PostMessageWorkerTransport {
@@ -125,29 +150,15 @@ export class WorkerRPC extends PostMessageWorkerTransport {
 		throw new Error("Invalid arguments");
 	}
 
-	public addModule(name: string, content: string) {
-		return this.sendAddModule(name, content);
-	}
-
 	/**
 	 * Sends a request to the Worker to fetch the types for the provided files.
 	 *
-	 * @param files - An object containing the files to fetch types for.
+	 * @param packageJson - An object representing the package.json file.
 	 * @returns A promise that resolves when the Worker has finished fetching the types.
 	 * The promise resolves to a boolean indicating whether the fetch was successful.
 	 */
-	public fetchTypes(files: Files): Promise<boolean>;
-	public fetchTypes(name: string, content: string): Promise<boolean>;
-	public fetchTypes(filesOrName: unknown, content?: string | undefined) {
-		if (typeof filesOrName === "object") {
-			return this.sendFetchTypes(filesOrName as Record<string, string>);
-		}
-		if (
-			typeof filesOrName === "string" &&
-			(typeof content === "string" || typeof content === "object")
-		) {
-			return this.sendFetchTypes({ [filesOrName]: content });
-		}
+	public fetchTypes(pkgJson: PackageJson): Promise<boolean> {
+		return this.sendFetchTypes(pkgJson);
 		throw new Error("Invalid arguments");
 	}
 
@@ -174,20 +185,6 @@ export class WorkerRPC extends PostMessageWorkerTransport {
 			return this.sendSetup({ [configFilesOrName]: configContents });
 		}
 		throw new Error("Invalid arguments");
-	}
-
-	private sendAddModule(name: string, content: string) {
-		return new Promise<boolean>((resolve, reject) => {
-			const id = this.internalMessageId++;
-			this.rpcQueue.set(id, resolve);
-			this.worker.postMessage({
-				id,
-				method: "@@add-module",
-				params: {
-					[name]: content,
-				},
-			} as WorkerMessage<"@@add-module">);
-		});
 	}
 
 	private onMessage(e: MessageEvent) {
@@ -233,7 +230,7 @@ export class WorkerRPC extends PostMessageWorkerTransport {
 		return promise;
 	}
 
-	private sendFetchTypes(files: Record<string, string>) {
+	private sendFetchTypes(files: PackageJson) {
 		return new Promise<boolean>((resolve, reject) => {
 			const id = this.internalMessageId++;
 			this.rpcQueue.set(id, resolve);

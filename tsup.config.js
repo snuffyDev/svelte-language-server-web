@@ -268,6 +268,7 @@ export default defineConfig({
   metafile: true,
   splitting: true,
   minifyWhitespace: true,
+  dts:true,
   minify: true,
   treeshake: true,
   entryPoints: [
