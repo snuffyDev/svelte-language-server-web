@@ -16,7 +16,6 @@ let ts = {
 	setSys() {},
 	sys, // ...langService,
 } as Partial<typeof typescript>;
-
 const proxy = new Proxy(ts, {
 	get(target, p, receiver) {
 		if (p === "default") return receiver;

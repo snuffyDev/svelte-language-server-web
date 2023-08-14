@@ -10,7 +10,10 @@ const ts = _ts.default;
 
 import preprocess from "svelte-preprocess/dist/autoProcess.js";
 import * as transformerTS from "svelte-preprocess/dist/transformers/typescript.js";
+import * as transformerPOSTCSS from "svelte-preprocess/dist/transformers/postcss.js";
 import * as transformerBabel from "svelte-preprocess/dist/transformers/babel.js";
+import * as transformerSCSS from "svelte-preprocess/dist/transformers/scss.js";
+import * as transformerLess from "svelte-preprocess/dist/transformers/less.js";
 import * as transformerGlobalStyle from "svelte-preprocess/dist/transformers/globalStyle.js";
 import postcss from "postcss";
 import fs from "fs";
@@ -123,6 +126,9 @@ const required = {
 	typescript: ts,
 	"../transformers/typescript.js": { transformer: transformerTS.transformer },
 	"./transformers/typescript": { transformer: transformerTS.transformer },
+	"./transformers/postcss": { transformer: transformerPOSTCSS.transformer },
+	"./transformers/scss": { transformer: transformerSCSS.transformer },
+	"./transformers/less": { transformer: transformerLess.transformer },
 	"./transformers/globalStyle": {
 		transformer: transformerGlobalStyle.transformer,
 	},

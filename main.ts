@@ -55,7 +55,7 @@ const hoverMarked = hoverTooltip((view, pos, side) => {
 });
 
 const init_files = {
-	"file:///tsconfig.json": `{
+	"file:///.svelte-kit/tsconfig.json": `{
 		"compilerOptions": {
 		  "target": "esnext",
 		  "module": "commonjs",
@@ -75,6 +75,16 @@ const init_files = {
 		  }
 		}
 	  }`,
+	"file:///tsconfig.json": `{
+		"extends": "./.svelte-kit/tsconfig.json",
+		"compilerOptions": {
+			"target": "es2020",
+			"module": "es2020",
+			"lib": ["dom", "es2015"],
+			"declaration": true
+		}
+	}
+	`,
 	"file:///package.json": `{
 		"name": "svelte-language-server-web",
 		"private": true,

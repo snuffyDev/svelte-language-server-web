@@ -4,6 +4,7 @@ import EventEmitter from "events";
 import {
 	WatchEventType,
 	type WatchOptions,
+	type WatchListener,
 	type FSWatcher as _FSWatcher,
 } from "fs";
 import process from "process";
@@ -11,27 +12,52 @@ import {
 	ParsedTsconfig,
 	type FileWatcher,
 	type FileWatcherCallback,
+	DirectoryWatcherCallback,
 } from "typescript";
 import _path from "./deps/path-deno";
 import json from "./libs.json";
-
-const sys = new Map<string, string>();
-const directories = new Set();
-
 type EventListener = (
 	eventType: WatchEventType | "close" | "error",
 	filename: string | Buffer,
 ) => void;
 
+enum FileType {
+	File,
+	Directory,
+	SymbolicLink,
+}
+
+const sys = new Map<string, { content: string; type: FileType }>();
+const watchFiles: Map<
+	string,
+	{
+		path: string;
+		callback: WatchListener<string>;
+		pollingInterval?: number;
+		options?: WatchOptions;
+	}
+> = new Map();
+const watchDirectories: Map<
+	string,
+	{
+		path: string;
+		callback: DirectoryWatcherCallback;
+		recursive?: boolean;
+		options?: WatchOptions;
+	}
+> = new Map();
+
+const directories = new Set();
+
 class FSWatcherImpl extends EventEmitter.EventEmitter implements _FSWatcher {
-	private listener: EventListener;
+	private listener: WatchListener<string>;
 	private path: string;
 	private watching: boolean;
 
 	constructor(
 		path: string,
 		private options: WatchOptions | Encoding,
-		listener: EventListener,
+		listener: WatchListener<string>,
 	) {
 		super();
 		this.path = VFSImpl.normalize(path);
@@ -78,9 +104,12 @@ export const FSWatcher: new (
 ) => _FSWatcher = FSWatcherImpl as any;
 
 class VFSImpl {
-	public static readonly output: string[] = [];
-	public static tsConfig: { compilerOptions: ParsedTsconfig["options"] };
+	private static symlinkMap: Map<string, string> = new Map();
 	private static tsConfigPaths: ParsedTsconfig["options"]["paths"] = {};
+	public static handlers: Map<string, EventListener[]> = new Map();
+
+	// Maps symlink paths to their targets
+	public static readonly output: string[] = [];
 
 	public static emit = <T extends WatchEventType | "close" | "error">(
 		event: T,
@@ -92,13 +121,18 @@ class VFSImpl {
 		}
 		return true;
 	};
-	public static handlers: Map<string, EventListener[]> = new Map();
 	public static eventNames = [...this.handlers.keys()];
+	public static getCurrentDirectory = () => {
+		// console.log({ getCurrentDirectory: "/" });
 
+		return "/";
+	};
+	public static getExecutingFilePath = () => {
+		return "/" || process.execPath;
+	};
 	public static listenerCount = (event: string) => {
 		return VFSImpl.handlers.get(event)?.length ?? 0;
 	};
-
 	public static off = (event: string, callback: EventListener) => {
 		const handlers = VFSImpl.handlers.get(event) ?? [];
 		const index = handlers.indexOf(callback);
@@ -107,12 +141,12 @@ class VFSImpl {
 		}
 		VFSImpl.handlers.set(event, handlers);
 	};
-
 	public static on = (event: string, callback: EventListener) => {
 		const handlers = VFSImpl.handlers.get(event) ?? [];
 		handlers.push(callback);
 		VFSImpl.handlers.set(event, handlers as unknown as EventListener[]);
 	};
+	public static tsConfig: { compilerOptions: ParsedTsconfig["options"] };
 
 	// VFS Methods
 	public static createDirectory(path: string) {
@@ -131,16 +165,6 @@ class VFSImpl {
 		return 1;
 	}
 
-	public static getCurrentDirectory = () => {
-		// console.log({ getCurrentDirectory: "/" });
-
-		return "/";
-	};
-
-	public static getExecutingFilePath = () => {
-		return "/" || process.execPath;
-	};
-
 	public static fileExists(path: string) {
 		if (!path.includes("node_modules")) {
 			// console.error(new Error(path).stack);
@@ -155,6 +179,11 @@ class VFSImpl {
 	public static getDirectories(path: string) {
 		// console.log([...directories.keys()]);
 		return [...directories.keys()];
+	}
+
+	public static isSymlink(path: string) {
+		const normalizedPath = VFSImpl.normalize(path);
+		return VFSImpl.symlinkMap.has(normalizedPath);
 	}
 
 	public static normalize(path: string) {
@@ -205,18 +234,47 @@ class VFSImpl {
 
 			// console.log({ path, encoding, test });
 			return encoding?.startsWith("utf")
-				? test
+				? test.content
 				: encoding
-				? test
-				: Buffer.from(test);
+				? test.content
+				: Buffer.from(test.content);
 		} catch {
 			return undefined;
 		}
 	}
 
+	public static readlink(path: string) {
+		const normalizedPath = VFSImpl.normalize(path);
+		return VFSImpl.symlinkMap.get(normalizedPath) || null;
+	}
+
 	public static resolvePath(path: string) {
 		directories.add(_path.posix.dirname(VFSImpl.normalize(path)));
 		return VFSImpl.normalize(_path.posix.resolve(path));
+	}
+
+	public static symlink(target: string, path: string, type: string = "file") {
+		// For simplicity, assume symlinks are only created to files
+		const normalizedTarget = VFSImpl.normalize(target);
+		const normalizedPath = VFSImpl.normalize(path);
+
+		if (!VFSImpl.fileExists(normalizedTarget)) {
+			throw new Error(`Target ${normalizedTarget} does not exist`);
+		}
+
+		sys.set(normalizedPath, normalizedTarget);
+		VFSImpl.symlinkMap.set(normalizedPath, normalizedTarget);
+	}
+
+	public static unlink(path: string) {
+		const normalizedPath = VFSImpl.normalize(path);
+
+		if (!sys.has(normalizedPath) && !VFSImpl.isSymlink(normalizedPath)) {
+			throw new Error(`File or symlink ${normalizedPath} not found`);
+		}
+
+		sys.delete(normalizedPath);
+		VFSImpl.symlinkMap.delete(normalizedPath);
 	}
 
 	public static write(s: string) {
@@ -234,8 +292,9 @@ class VFSImpl {
 		// Find the root `tsconfig`
 		// TODO: jsconfig support
 		if (
-			normalizedPath.startsWith("/tsconfig.json") ||
-			normalizedPath.startsWith("/jsconfig.json")
+			!normalizedPath.includes("node_modules") &&
+			(normalizedPath.endsWith("/tsconfig.json") ||
+				normalizedPath.endsWith("/jsconfig.json"))
 		) {
 			try {
 				const tsconfig = JSON.parse(
@@ -246,30 +305,49 @@ class VFSImpl {
 						),
 				);
 				VFS.tsConfig = tsconfig;
-				VFS.tsConfigPaths = tsconfig.compilerOptions.paths || {};
+				VFS.tsConfigPaths = tsconfig?.compilerOptions?.paths || {};
 			} catch (err) {
 				console.error(err);
 				console.debug({ path, data, writeByteOrderMark });
 			}
 		}
-		return sys.set(normalizedPath, data);
+		return sys.set(normalizedPath, { content: data, type: FileType.File });
 	}
 }
 
 /* Create an in-memory file watcher */
 class VFSWithFileTreeAndDirectorySupport extends VFSImpl {
-	public static watchDirectory = VFSWithFileTreeAndDirectorySupport.watchFile;
+	public static watchDirectory = (
+		path: string,
+		callback: DirectoryWatcherCallback,
+		recursive?: boolean,
+		options?: WatchOptions,
+	) => {
+		const normalizedPath = VFSImpl.normalize(path);
+		const watcher = watchDirectories.get(normalizedPath);
+		if (watcher) {
+			watcher.callback = callback;
+			watcher.options = options;
+			watcher.recursive = recursive;
+		} else {
+			watchDirectories.set(normalizedPath, {
+				path,
+				callback,
+				options,
+				recursive,
+			});
+		}
+		return new FSWatcher(normalizedPath, options, callback);
+	};
 	public static watchers: Map<string, _FSWatcher> = new Map();
 
-	public static unwatchDirectory(path: string, callback?: FileWatcherCallback) {
-		const watcher = VFSWithFileTreeAndDirectorySupport.watchers.get(
-			VFSImpl.normalize(path),
-		);
+	public static unwatchDirectory(
+		path: string,
+		callback?: DirectoryWatcherCallback,
+	) {
+		const watcher = watchDirectories.get(VFSImpl.normalize(path));
 		if (watcher) {
-			watcher.close();
-			VFSWithFileTreeAndDirectorySupport.watchers.delete(
-				VFSImpl.normalize(path),
-			);
+			watchDirectories.delete(VFSImpl.normalize(path));
 		}
 	}
 
@@ -287,19 +365,18 @@ class VFSWithFileTreeAndDirectorySupport extends VFSImpl {
 
 	public static watchFile(
 		path: string,
-		options: WatchOptions | Encoding,
-		callback?: (
-			event: WatchEventType | "error" | "close",
-			fileName: string,
-		) => void,
-	): FileWatcher {
-		//@ts-ignore
-		const watcher = new FSWatcher(VFSImpl.normalize(path), options, callback);
-		VFSWithFileTreeAndDirectorySupport.watchers.set(
-			VFSImpl.normalize(path),
-			watcher,
-		);
-		return watcher;
+		options: WatchOptions,
+		callback?: WatchListener<string>,
+	) {
+		const normalizedPath = VFSImpl.normalize(path);
+		const watcher = watchFiles.get(normalizedPath);
+		if (watcher) {
+			watcher.callback = callback;
+			watcher.options = options;
+		} else {
+			watchFiles.set(normalizedPath, { path, callback, options });
+		}
+		return new FSWatcher(normalizedPath, options, callback);
 	}
 }
 

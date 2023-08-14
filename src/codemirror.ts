@@ -125,6 +125,10 @@ export class WorkerRPC extends PostMessageWorkerTransport {
 		throw new Error("Invalid arguments");
 	}
 
+	public addModule(name: string, content: string) {
+		return this.sendAddModule(name, content);
+	}
+
 	/**
 	 * Sends a request to the Worker to fetch the types for the provided files.
 	 *
@@ -170,6 +174,20 @@ export class WorkerRPC extends PostMessageWorkerTransport {
 			return this.sendSetup({ [configFilesOrName]: configContents });
 		}
 		throw new Error("Invalid arguments");
+	}
+
+	private sendAddModule(name: string, content: string) {
+		return new Promise<boolean>((resolve, reject) => {
+			const id = this.internalMessageId++;
+			this.rpcQueue.set(id, resolve);
+			this.worker.postMessage({
+				id,
+				method: "@@add-module",
+				params: {
+					[name]: content,
+				},
+			} as WorkerMessage<"@@add-module">);
+		});
 	}
 
 	private onMessage(e: MessageEvent) {

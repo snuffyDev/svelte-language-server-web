@@ -190,9 +190,39 @@ export class ConfigLoader {
 
 	private async loadConfig(configPath: string, directory: string) {
 		try {
+			const configFile = this.fs.readFileSync(configPath);
+			const processor = {};
+			const reqPreProcess = globalThis.__importDefault(`svelte-preprocess`);
+			for (const key in reqPreProcess.default) {
+				processor[key] = `${reqPreProcess.default[key].toString()}`;
+			}
+			console.log({ processor });
+			// convert processor to a base64 string, while keeping the functions intact
+			const processorString = `export default () => (${JSON.stringify(
+				processor,
+			)})`;
+			console.log({ processorString });
+			// convert the base64 string into a data url
+
+			// convert the data url into a object url
+			const processorObjectUrl = globalThis.URL.createObjectURL(
+				new Blob([processorString], { type: "application/javascript" }),
+			);
+			/** @vite-ignore */
+
 			let config = this.disabled
 				? {}
-				: (await this.dynamicImport(configPath))?.default;
+				: (
+						await import(
+							`data:application/javascript;base64,${btoa(
+								configFile.replace(
+									"'svelte-preprocess';",
+									`'${processorObjectUrl}';`,
+								),
+							)}`
+						)
+				  )?.default;
+			// console.log({ config });		if (args.join("") === "modulePathreturn import(modulePath)")
 
 			for (const key in config.preprocess) {
 				config.preprocess[key] = new Function(
@@ -218,7 +248,7 @@ export class ConfigLoader {
 			Logger.error("Error while loading config at ", configPath);
 			Logger.error(err);
 			const config = {
-				...this.useFallbackPreprocessor(directory, true),
+				...(await this.useFallbackPreprocessor(directory, true)),
 				compilerOptions: {
 					...DEFAULT_OPTIONS,
 					...NO_GENERATE,
@@ -267,17 +297,17 @@ export class ConfigLoader {
 		}
 	}
 
-	private useFallbackPreprocessor(
+	private async useFallbackPreprocessor(
 		path: string,
 		foundConfig: boolean,
-	): SvelteConfig {
+	): Promise<SvelteConfig> {
 		Logger.log(
 			(foundConfig
 				? "Found svelte.config.js but there was an error loading it. "
 				: "No svelte.config.js found. ") +
 				"Using https://github.com/sveltejs/svelte-preprocess as fallback",
 		);
-		const sveltePreprocess = importSveltePreprocess(path);
+		const sveltePreprocess = require("svelte-preprocess");
 		return {
 			preprocess: sveltePreprocess({
 				// 4.x does not have transpileOnly anymore, but if the user has version 3.x

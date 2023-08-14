@@ -76,7 +76,7 @@ function symlink(
 	path: string | Buffer | URL,
 ): Promise<void> {
 	return new Promise((resolve, reject) => {
-		reject(new Error("symlink is not supported in the VFS"));
+		resolve(VFS.symlink(target.toString(), path.toString()));
 	});
 }
 
@@ -183,7 +183,8 @@ function statSync(
 		isDirectory: () => !exists,
 		isBlockDevice: () => false,
 		isCharacterDevice: () => false,
-		isSymbolicLink: () => false,
+		isSymbolicLink: () => VFS.isSymlink(normalizedPath),
+
 		isFIFO: () => false,
 		isSocket: () => false,
 		dev: 0,
@@ -297,8 +298,8 @@ function linkSync(
 	existingPath: string | Buffer | URL,
 	newPath: string | Buffer | URL,
 ): void {
-	const normalizedExistingPath = normalizePath(existingPath.toString());
-	const normalizedNewPath = normalizePath(newPath.toString());
+	VFS.symlink(existingPath.toString(), newPath.toString());
+
 	// Not supported in the vfs, but can be implemented if needed.
 }
 
@@ -307,9 +308,7 @@ function symlinkSync(
 	path: string | Buffer | URL,
 	type?: string,
 ): void {
-	const normalizedTarget = normalizePath(target.toString());
-	const normalizedPath = normalizePath(path.toString());
-	// Not supported in the vfs, but can be implemented if needed.
+	VFS.symlink(target.toString(), path.toString(), type);
 }
 
 function truncateSync(path: string | Buffer | URL, len?: number): void {
@@ -319,7 +318,7 @@ function truncateSync(path: string | Buffer | URL, len?: number): void {
 
 function unlinkSync(path: string | Buffer | URL): void {
 	const normalizedPath = normalizePath(path.toString());
-	// Not supported in the vfs, but can be implemented if needed.
+	VFS.unlink(normalizedPath);
 }
 
 function rmdirSync(path: string | Buffer | URL): void {
@@ -337,7 +336,7 @@ function lstatSync(path: string | Buffer | URL): Stats {
 		isDirectory: () => !exists,
 		isBlockDevice: () => false,
 		isCharacterDevice: () => false,
-		isSymbolicLink: () => false,
+		isSymbolicLink: () => VFS.isSymlink(normalizedPath),
 		isFIFO: () => false,
 		isSocket: () => false,
 		dev: 0,
@@ -376,11 +375,10 @@ function fstatSync(fd: number): Stats {
 	throw new Error("fstatSync is not supported in the vfs");
 }
 
-function readlinkSync(path: string | Buffer | URL): string {
-	const normalizedPath = normalizePath(path.toString());
-	// Not supported in the vfs, but can be implemented if needed.
-	throw new Error("readlinkSync is not supported in the vfs");
+function readlinkSync(path: string | Buffer | URL): string | null {
+	return VFS.readlink(path.toString());
 }
+
 type EventListener = (...args: any[]) => void;
 
 function lstat(path: string | Buffer | URL): Promise<Stats> {

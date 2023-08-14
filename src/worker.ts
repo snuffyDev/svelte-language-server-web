@@ -16,6 +16,7 @@ import type {
 	WorkerResponse,
 } from "./messages";
 import { fetchTypeDefinitionsFromCDN } from "./features/autoTypings";
+import { deepMerge } from "./worker.utils";
 
 const worker = globalThis as unknown as DedicatedWorkerGlobalScope;
 
@@ -58,6 +59,7 @@ addEventListener("error", (e) => console.error(e));
  * ```
  */
 export const SvelteLanguageWorker = () => {
+	const tsConfig = {};
 	const setupQueue = [];
 
 	const isRPCMessage = (
@@ -88,36 +90,22 @@ export const SvelteLanguageWorker = () => {
 				postMessage({ id, method: "@@setup", complete: true });
 			}
 		});
+
 		addEventListener("message", async (event) => {
 			// Process our custom RPC messages
 			if (isRPCMessage(event.data)) {
 				if (event.data.method === "@@fetch-types") {
 					console.log({ event, json: event.data.params });
-					await handleFetchTypes(event.data)
-						.then(() => {
-							postMessage({
-								method: "@@fetch-types",
-								id: event.data.id,
-								complete: true,
-							} as WorkerResponse<"@@fetch-types">);
-						})
-						.catch(console.error);
+					await handleFetchTypes(event.data).catch(console.error);
+					postMessage({
+						method: "@@fetch-types",
+						id: event.data.id,
+						complete: true,
+					} as WorkerResponse<"@@fetch-types">);
 					return;
 				}
 
-				console.log({ event, json: event.data.params });
-				await new Promise<void>((resolve) => {
-					const fileNames = Object.keys(event.data.params);
-					for (let i = 0; i < fileNames.length; i++) {
-						const fileName = fileNames[i];
-						const fileContents = event.data.params[fileName];
-
-						VFS.writeFile(fileName, fileContents);
-						if (i === fileNames.length - 1) {
-							resolve();
-						}
-					}
-				});
+				await updateVFS(event.data.params);
 
 				if (event.data.method === "@@setup") {
 					console.log("Setting up Svelte Language Server...");
@@ -131,6 +119,38 @@ export const SvelteLanguageWorker = () => {
 				}
 			}
 		});
+
+		async function updateVFS(params: Record<string, string>) {
+			let updateTsconfig = false;
+			await new Promise<void>((resolve) => {
+				const fileNames = Object.keys(params).sort(
+					(a, b) => b.length - a.length,
+				);
+				for (let i = 0; i < fileNames.length; i++) {
+					const fileName = fileNames[i];
+					const fileContents = params[fileName];
+
+					VFS.writeFile(fileName, fileContents);
+					if (
+						!fileName.includes("node_modules") &&
+						(fileName.includes("jsconfig.json") ||
+							fileName.includes("tsconfig.json"))
+					) {
+						updateTsconfig = true;
+						Object.assign(
+							tsConfig,
+							deepMerge(tsConfig, JSON.parse(fileContents)),
+						);
+					}
+					if (i === fileNames.length - 1) {
+						resolve();
+					}
+				}
+			});
+			if (updateTsconfig) {
+				VFS.writeFile("/tsconfig.json", JSON.stringify(tsConfig));
+			}
+		}
 	} catch (e) {
 		console.error({ error: e });
 	}
