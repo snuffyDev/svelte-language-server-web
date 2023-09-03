@@ -2,9 +2,6 @@
 import "./prelude";
 
 //@ts-ignore
-import * as Buffer from "buffer/";
-
-//@ts-ignore
 import _ts from "typescript";
 //@ts-ignore
 const ts = _ts.default;
@@ -18,9 +15,6 @@ import * as transformerLess from "svelte-preprocess/dist/transformers/less.js";
 import * as transformerGlobalStyle from "svelte-preprocess/dist/transformers/globalStyle.js";
 import postcss from "postcss";
 import fs from "fs";
-
-//@ts-ignore
-import * as ppts from "svelte-preprocess/dist/processors/typescript.js";
 
 import path from "path";
 import { version as prettierVersion } from "prettier/package.json";
@@ -41,12 +35,13 @@ if (!globalThis.typescript$1) {
 process.versions = {};
 process.versions.node = "v16.16.1";
 
-globalThis.__dirname = import.meta.url || "/tsconfig";
+globalThis.__dirname = "/";
 
 // @ts-expect-error patching require
 globalThis.require = function (req) {
 	if (throwIfRequire.hasOwnProperty(req))
 		throw Error("Cannot require module " + req + ".");
+
 	for (const imp of Object.keys(required)) {
 		if (typeof req === "string" && imp === req) return required[imp];
 		else if (
@@ -57,7 +52,7 @@ globalThis.require = function (req) {
 		)
 			return required[imp];
 	}
-	console.error("dynamic required missing", req);
+	console.debug("dynamic required missing", req);
 };
 
 // patching LN#47 in src/deps/svelte-language-server/src/lib/documents/configLoader.ts
@@ -65,24 +60,21 @@ const _Function = new Proxy(Function, {
 	construct(target, argArray, newTarget) {
 		if (argArray.join("") === "modulePathreturn import(modulePath)")
 			return (x) => {
-				console.log(x);
 				const processor = {};
 				const reqPreProcess = globalThis.__importDefault(`svelte-preprocess`);
 				for (const key in reqPreProcess.default) {
 					processor[key] = `${reqPreProcess.default[key].toString()}`;
 				}
-				console.log({ processor });
 				// convert processor to a base64 string, while keeping the functions intact
 				const processorString = `export default () => (${JSON.stringify(
 					processor,
 				)})`;
-				console.log({ processorString });
-				// convert the base64 string into a data url
 
 				// convert the data url into a object url
 				const processorObjectUrl = URL.createObjectURL(
 					new Blob([processorString], { type: "application/javascript" }),
 				);
+
 				/** @vite-ignore */
 				return import(
 					`data:application/javascript;base64,${btoa(
@@ -92,13 +84,11 @@ const _Function = new Proxy(Function, {
 			};
 	},
 	apply(target, thisArg, args) {
-		console.log({ target, thisArg, args });
 		if (args.join("") === "return this") {
 			return function () {
 				return this;
 			};
 		}
-		console.log(args, args.join(""));
 
 		return new GLOBAL_FUNCTION(...arguments);
 	},
@@ -108,7 +98,7 @@ globalThis.__importStar = (req) => {
 };
 
 globalThis._importScripts = function (...args: any[]) {
-	console.error("Trying to import a script", args);
+	console.debug("Trying to import a script", args);
 };
 
 const required = {
@@ -121,7 +111,7 @@ const required = {
 	"/node_modules/svelte/package.json": { version: preprocess_version },
 	"svelte-preprocess/autoProcess.js": preprocess,
 	"/node_modules/svelte-preprocess": preprocess.sveltePreprocess,
-	"svelte-preprocess": preprocess.sveltePreprocess,
+	"svelte-preprocess": preprocess,
 	fs,
 	"graceful-fs": fs,
 	typescript: ts,
@@ -145,7 +135,6 @@ const required = {
 	"/prettier/": prettier,
 };
 
-console.log({ required });
 globalThis.__importDefault = function (req) {
 	return { default: require(req) };
 };

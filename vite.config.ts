@@ -3,37 +3,33 @@ import { defineConfig } from "vite";
 export default defineConfig({
 	build: {
 		rollupOptions: {
-			treeshake: false,
+			treeshake: true,
 			output: { compact: false, sourcemap: false },
 			watch: false,
 		},
 		sourcemap: false,
-		minify: false,
+		minify: true,
+
 		outDir: "build",
 		// lib: { entry: "dist/index.js", formats: ["es"] },
 	},
 	worker: {
 		rollupOptions: {
-			treeshake: false,
-			output: { compact: false, sourcemap: false },
+			treeshake: true,
+			output: { compact: true, sourcemap: false },
 			watch: false,
 		},
 	},
 	esbuild: {
-		minifySyntax: false,
-		minifyIdentifiers: false,
-		minifyWhitespace: false,
+		minifySyntax: true,
+		minifyIdentifiers: true,
+		minifyWhitespace: true,
 		define: {
 			"process.env.NODE_ENV": '"production"',
 		},
 	},
 
 	optimizeDeps: {
-		esbuildOptions: {
-			minify: false,
-			minifySyntax: false,
-			minifyIdentifiers: false,
-		},
 		exclude: ["./dist/index.js", "./dist/worker.js"],
 		force: true,
 	},

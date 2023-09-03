@@ -23,6 +23,7 @@ import {
 	SemanticTokensRefreshRequest,
 	InlayHintRefreshRequest,
 	DidChangeWatchedFilesNotification,
+	Range,
 } from "vscode-languageserver/browser";
 import {
 	BrowserMessageReader as IPCMessageReader,
@@ -56,9 +57,13 @@ import { setIsTrusted } from "./importPackage";
 import { SORT_IMPORT_CODE_ACTION_KIND } from "./plugins/typescript/features/CodeActionsProvider";
 import { createLanguageServices } from "./plugins/css/service";
 import { FileSystemProvider } from "./plugins/css/FileSystemProvider";
-import { marked } from "marked";
 import { VFS } from "../../../vfs";
 import ts from "typescript";
+import { writeFileSync } from "fs";
+import { handleFSSync, syncFiles } from "../../../features/workspace";
+import { transformHoverResultToHtml } from "../../../utils";
+import path from "path";
+import { toFileUrl } from "../../path-deno";
 
 namespace TagCloseRequest {
 	export const type: RequestType<
@@ -86,7 +91,7 @@ export interface LSOptions {
  *
  * @param options Options to customize behavior
  */
-export function startServer(options?: LSOptions) {
+export async function startServer(options?: LSOptions) {
 	let connection = options?.connection;
 	if (!connection) {
 		if (process.argv.includes("--stdio")) {
@@ -113,6 +118,46 @@ export function startServer(options?: LSOptions) {
 	const pluginHost = new PluginHost(docManager);
 	let sveltePlugin: SveltePlugin = undefined as any;
 	let watcher: FallbackWatcher | undefined;
+
+	const normalizedWorkspaceUris = [""].map(normalizeUri);
+
+	let lsTsDocResolver = new LSAndTSDocResolver(
+		docManager,
+		normalizedWorkspaceUris,
+		configManager,
+		{
+			tsSystem: ts.sys,
+			notifyExceedSizeLimit: notifyTsServiceExceedSizeLimit,
+			onProjectReloaded: refreshCrossFilesSemanticFeatures,
+			watch: true,
+		},
+	);
+	handleFSSync((filename, contents) => {
+		const uri = toFileUrl(filename).toString();
+		if (
+			!uri.includes("node_modules") &&
+			(uri.includes(".svelte") || uri.includes(".ts") || uri.includes(".js"))
+		) {
+			if (VFS.fileExists(uri) === false) {
+				// docManager.markAsOpenedInClient(uri);
+				VFS.writeFile(uri, contents);
+				ts.sys.writeFile(VFS.normalize(uri), contents);
+			} else {
+				VFS.writeFile(uri, contents);
+				ts.sys.writeFile(VFS.normalize(uri), contents);
+				if (uri.endsWith(".js") || uri.endsWith(".ts")) {
+					onDidChangeTsOrJsFile({
+						uri,
+						changes: [
+							{
+								text: contents,
+							},
+						],
+					});
+				}
+			}
+		}
+	});
 
 	connection.onInitialize((evt) => {
 		const workspaceUris = evt.workspaceFolders?.map((folder) =>
@@ -215,17 +260,7 @@ export function startServer(options?: LSOptions) {
 		pluginHost.register(
 			new TypeScriptPlugin(
 				configManager,
-				new LSAndTSDocResolver(
-					docManager,
-					normalizedWorkspaceUris,
-					configManager,
-					{
-						tsSystem: ts.sys,
-						notifyExceedSizeLimit: notifyTsServiceExceedSizeLimit,
-						onProjectReloaded: refreshCrossFilesSemanticFeatures,
-						watch: true,
-					},
-				),
+				lsTsDocResolver,
 				normalizedWorkspaceUris,
 			),
 		);
@@ -237,6 +272,7 @@ export function startServer(options?: LSOptions) {
 		const clientSupportedCodeActionKinds =
 			clientCodeActionCapabilities?.codeActionLiteralSupport?.codeActionKind
 				.valueSet;
+
 		return {
 			capabilities: {
 				textDocumentSync: {
@@ -247,12 +283,6 @@ export function startServer(options?: LSOptions) {
 					},
 				},
 				hoverProvider: true,
-				codeLensProvider: { resolveProvider: true },
-				diagnosticProvider: {
-					workspaceDiagnostics: true,
-					interFileDependencies: true,
-				},
-
 				completionProvider: {
 					resolveProvider: true,
 					triggerCharacters: [
@@ -287,9 +317,6 @@ export function startServer(options?: LSOptions) {
 						labelDetailsSupport: true,
 					},
 				},
-				documentLinkProvider: true,
-				declarationProvider: true,
-				workspaceSymbolProvider: true,
 				documentFormattingProvider: true,
 				colorProvider: true,
 				documentSymbolProvider: true,
@@ -343,7 +370,6 @@ export function startServer(options?: LSOptions) {
 					range: true,
 					full: true,
 				},
-
 				linkedEditingRangeProvider: true,
 				implementationProvider: true,
 				typeDefinitionProvider: true,
@@ -355,8 +381,7 @@ export function startServer(options?: LSOptions) {
 
 	connection.onInitialized(() => {
 		if (
-			!watcher &&
-			configManager.getClientCapabilities()?.workspace?.didChangeWatchedFiles
+			!configManager.getClientCapabilities()?.workspace?.didChangeWatchedFiles
 				?.dynamicRegistration
 		) {
 			connection?.client.register(DidChangeWatchedFilesNotification.type, {
@@ -404,16 +429,22 @@ export function startServer(options?: LSOptions) {
 	});
 
 	connection.onDidOpenTextDocument((evt) => {
+		if (
+			evt.textDocument.languageId === "typescript" ||
+			evt.textDocument.languageId === "javascript"
+		)
+			return;
 		const document = docManager.openDocument(evt.textDocument);
 		docManager.markAsOpenedInClient(evt.textDocument.uri);
-		// if (VFS.fileExists(evt.textDocument.uri) === false) {
-		VFS.writeFile(
-			evt.textDocument.uri,
-			docManager.get(evt.textDocument.uri).getText(),
-		);
-		// }
-		setTimeout(() => diagnosticsManager.scheduleUpdate(document), 0);
-		// console.log;
+
+		if (VFS.fileExists(evt.textDocument.uri) === false) {
+			VFS.writeFile(
+				evt.textDocument.uri,
+				docManager.get(evt.textDocument.uri).getText(),
+			);
+		}
+
+		diagnosticsManager.scheduleUpdate(document);
 	});
 
 	connection.onDidCloseTextDocument((evt) =>
@@ -421,15 +452,18 @@ export function startServer(options?: LSOptions) {
 	);
 	connection.onDidChangeTextDocument((evt) => {
 		docManager.updateDocument(evt.textDocument, evt.contentChanges);
-		VFS.writeFile(
+
+		writeFileSync(
 			evt.textDocument.uri,
-			evt.contentChanges.reduce((acc, curr) => (acc += curr.text), ""),
+			docManager.get(evt.textDocument.uri).getText(),
 		);
+
 		pluginHost.didUpdateDocument();
 	});
-	connection.onHover((evt) =>
-		pluginHost.doHover(evt.textDocument, evt.position),
-	);
+	connection.onHover(async (evt) => {
+		const result = await pluginHost.doHover(evt.textDocument, evt.position);
+		return transformHoverResultToHtml(result);
+	});
 	connection.onCompletion((evt, cancellationToken) =>
 		pluginHost.getCompletions(
 			evt.textDocument,
@@ -549,11 +583,11 @@ export function startServer(options?: LSOptions) {
 		}
 	}, 1500);
 
-	const refreshCrossFilesSemanticFeatures = () => {
+	function refreshCrossFilesSemanticFeatures() {
 		diagnosticsManager.scheduleUpdateAll();
 		refreshInlayHints();
 		refreshSemanticTokens();
-	};
+	}
 
 	connection.onDidChangeWatchedFiles(onDidChangeWatchedFiles);
 	function onDidChangeWatchedFiles(para: DidChangeWatchedFilesParams) {
@@ -570,14 +604,15 @@ export function startServer(options?: LSOptions) {
 	}
 
 	connection.onDidSaveTextDocument(diagnosticsManager.scheduleUpdateAll);
-	connection.onNotification("$/onDidChangeTsOrJsFile", async (e: any) => {
+	async function onDidChangeTsOrJsFile(e: any) {
 		const path = urlToPath(e.uri);
 		if (path) {
 			pluginHost.updateTsOrJsFile(path, e.changes);
 		}
-
 		refreshCrossFilesSemanticFeatures();
-	});
+	}
+
+	connection.onNotification("$/onDidChangeTsOrJsFile", onDidChangeTsOrJsFile);
 
 	connection.onRequest(SemanticTokensRequest.type, (evt, cancellationToken) =>
 		pluginHost.getSemanticTokens(

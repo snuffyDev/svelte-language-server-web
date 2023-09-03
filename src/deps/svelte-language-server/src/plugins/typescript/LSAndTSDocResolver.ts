@@ -83,7 +83,7 @@ export class LSAndTSDocResolver {
 			text: content,
 			uri,
 		});
-		writeFileSync(uri, content);
+		// writeFileSync(uri, content);
 		this.docManager.lockDocument(uri);
 		return document;
 	};

@@ -1,3 +1,3 @@
 /** esbuild-ignore */
 export * from "./messages";
-export { WorkerRPC as SvelteWorkerRPC } from "./rpc";
+export { WorkerRPC as WorkerRPC } from "./rpc";

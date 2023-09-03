@@ -25,6 +25,10 @@ import {
 	hasTsExtensions,
 } from "./utils";
 
+import { createVirtualLanguageServiceHost } from "@typescript/vfs";
+import { createLanguageServiceHost } from "module_shims/typescript";
+import { readdirSync } from "fs";
+
 export interface LanguageServiceContainer {
 	readonly tsconfigPath: string;
 	readonly compilerOptions: ts.CompilerOptions;
@@ -188,7 +192,7 @@ export async function getServiceForTsconfig(
 	return service;
 }
 
-async function createLanguageService(
+export async function createLanguageService(
 	tsconfigPath: string,
 	workspacePath: string,
 	docContext: LanguageServiceDocumentContext,
@@ -241,7 +245,6 @@ async function createLanguageService(
 	try {
 		// For when svelte2tsx/svelte-check is part of node_modules, for example VS Code extension
 		svelteTsPath = require.resolve(docContext.ambientTypesSource);
-		// console.log({ svelteTsPath, docContext: docContext.ambientTypesSource });
 	} catch (e) {
 		// Fall back to dirname
 		svelteTsPath = __dirname;

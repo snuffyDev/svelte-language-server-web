@@ -1,7 +1,7 @@
 export const workerRPCMethods = [
 	"@@setup",
 	"@@add-files",
-	"@@add-module",
+	"@@delete-file",
 	"@@fetch-types",
 ] as const;
 export type WorkerRPCMethod = (typeof workerRPCMethods)[number];
@@ -19,7 +19,7 @@ type SetupMessage = WorkerMessage<"@@setup">;
 
 type AddFilesMessage = WorkerMessage<"@@add-files">;
 type FetchTypesMessage = WorkerMessage<"@@fetch-types">;
-type AddModuleMessage = WorkerMessage<"@@add-module">;
+type DeleteFileMessage = WorkerMessage<"@@delete-file">;
 
 type WorkerResponse<T extends WorkerRPCMethod> = {
 	method: T;
@@ -28,7 +28,7 @@ type WorkerResponse<T extends WorkerRPCMethod> = {
 };
 
 export type {
-	AddModuleMessage,
+	DeleteFileMessage,
 	WorkerResponse,
 	FetchTypesMessage,
 	WorkerMessage,
@@ -37,7 +37,7 @@ export type {
 };
 
 export const createWorkerMessage = <T extends WorkerRPCMethod>(
-	method: "setup" | "add-files" | "fetch-types",
+	method: "setup" | "add-files" | "fetch-types" | "delete-file",
 	id: number,
 	params: WorkerMessage<T>["params"],
 ): WorkerMessage<T> => ({

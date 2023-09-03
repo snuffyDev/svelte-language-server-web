@@ -21,6 +21,7 @@ import {
 	isTextSpanInGeneratedCode,
 	SnapshotMap,
 } from "./utils";
+import { URI } from "vscode-uri";
 
 export class FindReferencesProviderImpl implements FindReferencesProvider {
 	constructor(private readonly lsAndTsDocResolver: LSAndTSDocResolver) {}
@@ -30,7 +31,9 @@ export class FindReferencesProviderImpl implements FindReferencesProvider {
 		position: Position,
 		context: ReferenceContext,
 	): Promise<Location[] | null> {
+		const { scheme, authority } = URI.parse(document.getURL());
 		const { lang, tsDoc } = await this.getLSAndTSDoc(document);
+		const fragment = await tsDoc.getFullText();
 
 		const rawReferences = lang.findReferences(
 			tsDoc.filePath,

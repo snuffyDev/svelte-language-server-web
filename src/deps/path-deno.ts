@@ -1111,7 +1111,7 @@ function fromFileUrl1(url: string | URL) {
 }
 function toFileUrl1(path: string) {
 	if (!isAbsolute1(path)) {
-		throw new TypeError("Must be an absolute path.");
+		throw new TypeError("Must be an absolute path. Received " + path);
 	}
 	const url = new URL("file:///");
 	url.pathname = encodeWhitespace(

@@ -187,6 +187,28 @@ export class WorkerRPC extends PostMessageWorkerTransport {
 		throw new Error("Invalid arguments");
 	}
 
+	/**
+	 * Sends a request to the Worker to delete the provided file matching the given file name.
+	 *
+	 * @param fileName - The name of the file to delete.
+	 * @returns A promise that resolves when the Worker has finished deleting the file.
+	 */
+	public deleteFile(fileName: string) {
+		return this.sendDeleteFile(fileName);
+	}
+
+	private sendDeleteFile(fileName: string) {
+		return new Promise<boolean>((resolve, reject) => {
+			const id = this.internalMessageId++;
+			this.rpcQueue.set(id, resolve);
+			this.worker.postMessage({
+				id,
+				method: "@@delete-file",
+				params: { fileName },
+			} as WorkerMessage<"@@delete-file">);
+		});
+	}
+
 	private onMessage(e: MessageEvent) {
 		const data = e.data as
 			| IJSONRPCResponse

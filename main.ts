@@ -5,8 +5,8 @@ import { EditorView, hoverTooltip, keymap } from "@codemirror/view";
 import { EditorState, Extension } from "@codemirror/state";
 import { vscodeKeymap } from "@replit/codemirror-vscode-keymap";
 import { svelte } from "@replit/codemirror-lang-svelte";
-import { SvelteWorkerRPC } from "./dist";
-
+import { WorkerRPC } from "./dist";
+import { typescriptLanguage } from "@codemirror/lang-javascript";
 import {
 	LanguageServerClient,
 	languageServerWithTransport,
@@ -14,6 +14,8 @@ import {
 
 //@ts-expect-error
 import SvelteWorker from "./main_worker?worker";
+//@ts-expect-error
+import TSWorker from "./main_ts_worker?worker";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { marked } from "marked";
 import { markedHighlight } from "marked-highlight";
@@ -26,12 +28,13 @@ marked.use({
 });
 
 const nav = document.querySelector("nav");
-const [button1, button2] = nav!.querySelectorAll<HTMLButtonElement>("button");
+const [button1, button2, button3] =
+	nav!.querySelectorAll<HTMLButtonElement>("button");
 
 let currentTab = "";
 
 const svelteWorker: Worker = new SvelteWorker();
-
+const tsWorker: Worker = new TSWorker();
 const hoverMarked = hoverTooltip((view, pos, side) => {
 	let { from, to, text } = view.state.doc.lineAt(pos);
 	let start = pos,
@@ -57,33 +60,99 @@ const hoverMarked = hoverTooltip((view, pos, side) => {
 const init_files = {
 	"file:///.svelte-kit/tsconfig.json": `{
 		"compilerOptions": {
-		  "target": "esnext",
-		  "module": "commonjs",
-		  "lib": [
-			"dom",
-			"es2015"
-		  ],
-		  "jsx": "react",
-		  "declaration": true,
-		  "outDir": "./build",
-		  "strict": true,
-		  "esModuleInterop": true,
-		  "resolveJsonModule": true,
-		  "paths": {
-			"$lib/*": ["src/lib/*"],
-			"@/*": ["src/*"]
-		  }
-		}
-	  }`,
+			"paths": {
+				"$stores": [
+					"../src/lib/stores"
+				],
+				"$stores/*": [
+					"../src/lib/stores/*"
+				],
+				"$api": [
+					"../src/routes/(app)/api/_lib"
+				],
+				"$api/*": [
+					"../src/routes/(app)/api/_lib/*"
+				],
+				"$components": [
+					"../src/lib/components"
+				],
+				"$components/*": [
+					"../src/lib/components/*"
+				],
+				"$env": [
+					"../src/env.ts"
+				],
+				"$lib": [
+					"../src/lib"
+				],
+				"$lib/*": [
+					"../src/lib/*"
+				]
+			},
+			"rootDirs": [
+				"..",
+				"./types"
+			],
+			"importsNotUsedAsValues": "error",
+			"isolatedModules": true,
+			"preserveValueImports": true,
+			"lib": [
+				"esnext",
+				"DOM",
+				"DOM.Iterable"
+			],
+			"moduleResolution": "node",
+			"module": "esnext",
+			"target": "esnext",
+			"ignoreDeprecations": "5.0"
+		},
+		"include": [
+			"ambient.d.ts",
+			"./types/**/$types.d.ts",
+			"../vite.config.ts",
+			"../src/**/*.js",
+			"../src/**/*.ts",
+			"../src/**/*.svelte",
+			"../tests/**/*.js",
+			"../tests/**/*.ts",
+			"../tests/**/*.svelte"
+		],
+		"exclude": [
+			"../node_modules/**",
+			"./[!ambient.d.ts]**",
+			"../src/service-worker.js",
+			"../src/service-worker.ts",
+			"../src/service-worker.d.ts"
+		]
+	}`,
 	"file:///tsconfig.json": `{
 		"extends": "./.svelte-kit/tsconfig.json",
 		"compilerOptions": {
-			"target": "es2020",
-			"module": "es2020",
-			"lib": ["dom", "es2015"],
-			"declaration": true
-		}
+			"esModuleInterop": true,
+			"strict": true,
+			"strictFunctionTypes": true,
+			"noUnusedLocals": true,
+			"strictNullChecks": true,
+			"paths": {
+				"$components/*": ["./src/lib/components/*"],
+				"$stores/*": ["./src/lib/stores/*"],
+				"$api/*": ["./src/routes/(app)/api/_lib/*"],
+				"$lib": ["./src/lib"],
+				"$lib/*": ["./src/lib/*"],
+				"$env": ["./src/env.ts"],
+				"$app/*": ["./.svelte-kit/runtime/app/*"]
+			}
+		},
+		"ts-node": {
+			"compilerOptions": {
+				"allowSyntheticDefaultImports": true,
+				"resolveJsonModule": true
+			},
+			"moduleTypes": {}
+		},
+		"exclude": ["scripts/**/*.*", "node_modules/**"]
 	}
+
 	`,
 	"file:///package.json": `{
 		"name": "svelte-language-server-web",
@@ -198,16 +267,27 @@ const init_files = {
 	`,
 	"file:///svelte.config.js": `
 	  import preprocess from 'svelte-preprocess';
+	  import adapter from '@sveltejs/adapter-auto';
 	  export default {
 		  // Consult https://svelte.dev/docs#compile-time-svelte-preprocess
 		  // for more information about preprocessors
 		  preprocess: preprocess(),
+		  kit: {
+			  // hydrate the <div id="svelte"> element in src/app.html
+			  adapter: adapter(),
+		  }
 		}
 `,
 };
 
 // Regular files
 const files = {
+	"script.ts": `
+	export function add(a, b) {
+		return a + b;
+	}
+
+	console.log(add(3, 5));`,
 	"Comp1.svelte": `<script lang="ts">
 	function add(a, b) {
 		return a + b;
@@ -263,18 +343,35 @@ const files = {
 };
 
 (async () => {
-	let svelteLanguageServer = new SvelteWorkerRPC(svelteWorker, {
-		rootUri: null,
-		workspaceFolders: null,
+	let svelteLanguageServer = new WorkerRPC(svelteWorker, {
+		rootUri: "file:///",
+		documentUri: "",
+		workspaceFolders: [{ name: "root", uri: "file:///" }],
+
 		allowHTMLContent: true,
 		autoClose: false,
-		languageId: "",
+		languageId: "svelte",
 	});
+
+	let tsLanguageServer = new WorkerRPC(tsWorker, {
+		rootUri: "file:///",
+		documentUri: "",
+		workspaceFolders: [{ name: "root", uri: "file:///" }],
+
+		allowHTMLContent: true,
+		autoClose: false,
+		languageId: "typescript",
+	});
+
+	await tsLanguageServer.fetchTypes(
+		JSON.parse(init_files["file:///package.json"]),
+	);
+	await tsLanguageServer.setup(init_files);
 	await svelteLanguageServer.fetchTypes(
 		JSON.parse(init_files["file:///package.json"]),
 	);
 	await svelteLanguageServer.setup(init_files);
-
+	// svelteLanguageServer.client().attachPlugin(tsLanguageServer.client());
 	const states = new Map<`/${keyof typeof files}`, EditorState>();
 
 	let code = files["App.svelte"];
@@ -282,6 +379,14 @@ const files = {
 	const watcher = EditorView.updateListener.of((viewUpdate) => {
 		if (viewUpdate.selectionSet) {
 			code = viewUpdate.state.doc.toString();
+			if (currentTab === "file:///src/lib/script.ts") {
+				// svelteLanguageServer.client().notify("$/onDidChangeTsOrJsFile", {
+				// 	uri: "file:///src/lib/script.ts",
+				// 	changes: [
+				// 		{ from: 0, to: code.length, text: editor.state.doc.toString() },
+				// 	],
+				// });
+			}
 		}
 
 		console.log({ viewUpdate, code });
@@ -294,19 +399,24 @@ const files = {
 				basicSetup,
 				watcher,
 				languageServerWithTransport({
-					transport: svelteLanguageServer,
+					transport: uri.endsWith(".svelte")
+						? svelteLanguageServer
+						: tsLanguageServer,
 					documentUri: uri,
-					languageId: "svelte",
+					languageId: uri.endsWith(".svelte") ? "svelte" : "typescript",
 					workspaceFolders: null,
-					rootUri: null,
+					rootUri: "file:///",
 					allowHTMLContent: true,
 					autoClose: false,
-					client: svelteLanguageServer.client(),
+					client: (uri.endsWith(".svelte")
+						? svelteLanguageServer
+						: tsLanguageServer
+					).client(),
 				}),
 				keymap.of(vscodeKeymap),
 				oneDark,
-				svelte(),
-				hoverMarked,
+				uri.endsWith(".ts") ? typescriptLanguage : svelte(),
+				// hoverMarked,
 			],
 		});
 
@@ -318,16 +428,52 @@ const files = {
 		parent: document.getElementById("editor")!,
 		extensions: [],
 	});
+	let i = 0;
+	button3.onclick = () => {
+		let oldTab = currentTab;
+		currentTab = "file:///src/lib/script.ts";
+
+		const file = editor.state.doc.toString();
+		states.set(oldTab, editor.state);
+
+		if (!states.has("file:///src/lib/script.ts")) {
+			code = files["script.ts"];
+			states.set(
+				"file:///src/lib/script.ts",
+				createEditorState("file:///src/lib/script.ts"),
+			);
+		} else {
+			files[oldTab.split("/").pop()!] = file;
+			code = files["script.ts"];
+		}
+		const newState = states.get("file:///src/lib/script.ts");
+
+		svelteLanguageServer.client().textDocumentDidOpen({
+			textDocument: {
+				languageId: "typescript",
+				uri: "file:///src/lib/script.ts",
+				version: i++,
+				text: code,
+			},
+		});
+		editor.setState(newState!);
+		editor.dispatch({
+			changes: { from: 0, to: editor.state.doc.length, insert: code },
+		});
+	};
 
 	button1.onclick = () => {
+		let oldTab = currentTab;
+		currentTab = "file:///App.svelte";
+
 		const file = editor.state.doc.toString();
-		states.set("file:///src/lib/Comp1.svelte", editor.state);
+		states.set(oldTab, editor.state);
 
 		if (!states.has("file:///App.svelte")) {
 			code = files["App.svelte"];
 			states.set("file:///App.svelte", createEditorState("file:///App.svelte"));
 		} else {
-			files["Comp1.svelte"] = file;
+			files[oldTab.split("/").pop()!] = file;
 			code = files["App.svelte"];
 		}
 		const newState = states.get("file:///App.svelte");
@@ -339,24 +485,26 @@ const files = {
 	};
 
 	button2.onclick = () => {
+		let oldTab = currentTab;
+		currentTab = "file:///src/lib/Comp1.svelte";
+
 		const file = editor.state.doc.toString();
-		states.set("file:///App.svelte", editor.state);
+		states.set(oldTab, editor.state);
+
 		if (!states.has("file:///src/lib/Comp1.svelte")) {
+			code = files["Comp1.svelte"];
 			states.set(
 				"file:///src/lib/Comp1.svelte",
 				createEditorState("file:///src/lib/Comp1.svelte"),
 			);
+		} else {
+			files[oldTab.split("/").pop()!] = file;
+			code = files["Comp1.svelte"];
 		}
 
-		files["App.svelte"] = file;
-		code = files["Comp1.svelte"];
+		files[oldTab.split("/").pop()!] = file;
 
 		const newState = states.get("file:///src/lib/Comp1.svelte");
-		svelteLanguageServer.client().notify("$/onDidChangeTsOrJsFile", {
-			changes: [
-				{ from: 0, to: code.length, insert: editor.state.doc.toString() },
-			],
-		});
 		editor.setState(newState!);
 		editor.dispatch({
 			changes: { from: 0, to: editor.state.doc.length, insert: code },

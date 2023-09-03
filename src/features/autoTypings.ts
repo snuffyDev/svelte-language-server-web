@@ -103,7 +103,6 @@ const DEPENDENCY_KEYS = [
 export const fetchTypeDefinitionsFromCDN = async (packageJSON: PackageJSON) => {
 	const dependencies: Record<string, string> = {};
 	for (const key of DEPENDENCY_KEYS) {
-		console.log(key in packageJSON, packageJSON);
 		if (key in packageJSON) {
 			const { svelte = undefined, ...rest } = packageJSON[key];
 			Object.assign(dependencies, rest);
@@ -120,7 +119,6 @@ export const fetchTypeDefinitionsFromCDN = async (packageJSON: PackageJSON) => {
 			}),
 		),
 	);
-	console.log(types);
 	packageRetryTracker = {};
 	return (types || []).filter(Boolean) as [pkgName: string, dts: string][];
 };

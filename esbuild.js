@@ -24,11 +24,14 @@ const env = process.env.NODE_ENV || "development";
 const SVELTELAB_DIR = path.resolve(
 	"./../../Documents/GitHub/SvelteLab/src/lib/lsp/svelte",
 );
-const DIST_DIR = path.resolve(
-"./dist",
-);
+const DIST_DIR = path.resolve("./dist");
 
-const OUT_DIR = env === 'production' ? DIST_DIR : env === 'testing' ? DIST_DIR :  SVELTELAB_DIR;
+const OUT_DIR =
+	env === "production"
+		? DIST_DIR
+		: env === "testing"
+		? DIST_DIR
+		: SVELTELAB_DIR;
 
 const moduleShimmer = {
 	name: moduleShimmerName,
@@ -49,9 +52,15 @@ const moduleShimmer = {
 		});
 		const moduleShims = Object.fromEntries(
 			readdirSync(path.resolve(__dirname, "module_shims")).map((filename) => [
-				filename.includes('@babel') ? '@babel/core' : filename.replace(".ts", ""),
+				filename.includes("@babel")
+					? "@babel/core"
+					: filename.replace(".ts", ""),
 				readFileSync(
-					path.resolve(__dirname, "module_shims", filename.includes('@babel') ? filename + '/core.ts' : filename),
+					path.resolve(
+						__dirname,
+						"module_shims",
+						filename.includes("@babel") ? filename + "/core.ts" : filename,
+					),
 				).toString(),
 			]),
 		);
@@ -138,8 +147,7 @@ function createAliasPlugin(aliasConfig) {
 
 						treeShaking: true,
 
-						minify:true,
-
+						minify: true,
 
 						loader: "ts",
 					}).then((value) => value.code),
@@ -205,7 +213,10 @@ try {
 } catch (_a) {}
 await build({
 	plugins: [
-		nodeModulesPolyfillPlugin({modules: { buffer: true,process:true, 'node:process': true,net:true,},globals:{ process:true, Buffer:true}}),
+		nodeModulesPolyfillPlugin({
+			modules: { buffer: true, process: true, "node:process": true, net: true },
+			globals: { process: true, Buffer: true },
+		}),
 		moduleShimmer,
 		createAliasPlugin(aliases),
 		{
@@ -226,7 +237,6 @@ await build({
 		resolve({
 			fs: path.resolve("./module_shims/"),
 			"graceful-fs": path.resolve("./module_shims"),
-
 		}),
 	],
 	sourcemap: true,

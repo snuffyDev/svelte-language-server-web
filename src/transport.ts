@@ -23,7 +23,7 @@ export default class PostMessageWorkerTransport extends Transport {
 	}
 
 	private messageHandler = (ev: MessageEvent) => {
-		console.log("<-", ev.data);
+		console.debug("<-", ev.data);
 		this.transportRequestManager.resolveResponse(JSON.stringify(ev.data));
 	};
 
@@ -38,7 +38,7 @@ export default class PostMessageWorkerTransport extends Transport {
 		data: JSONRPCRequestData,
 		_timeout: number | null = 5000,
 	): Promise<any> {
-		console.log("->", data);
+		console.debug("->", data);
 		const prom = this.transportRequestManager.addRequest(data, null);
 		const notifications = getNotifications(data);
 		if (this.worker) {

@@ -1,4 +1,7 @@
-import { Dirent, Stats, type WatchOptions, watch__watchfile } from "fs";
+import { Dirent, Stats, type WatchOptions, openSync, writeSync } from "fs";
+
+const OPEN_FD_MAP = new Map<string, number>();
+const FD_MAP = new Map<number, string>();
 
 //@ts-ignore
 import { resolve } from "../src/deps/path-deno";
@@ -7,6 +10,23 @@ import { basename, dirname, join, parse, posix } from "path";
 interface ReadOptions {
 	encoding?: Encoding;
 	flag?: string;
+}
+
+function writeSync(
+	fd: number,
+	buffer: Buffer,
+	offset?: number,
+	length?: number,
+	position?: number | null,
+): number {
+	const path = FD_MAP.get(fd);
+	try {
+		if (!path) throw new Error("Invalid file descriptor");
+		VFS.writeFile(path, buffer.toString());
+	} finally {
+		return -1;
+	}
+	return 1;
 }
 
 interface WriteOptions {
@@ -76,12 +96,12 @@ function symlink(
 	path: string | Buffer | URL,
 ): Promise<void> {
 	return new Promise((resolve, reject) => {
-		resolve(VFS.symlink(target.toString(), path.toString()));
+		reject(new Error("symlink is not supported in the VFS"));
 	});
 }
 
 function closeSync(fd: number): void {
-	throw new Error("closeSync is not supported in the VFS");
+	FD_MAP.delete(fd);
 }
 
 function close(fd: number, callback: () => void): Promise<void> {
@@ -183,8 +203,7 @@ function statSync(
 		isDirectory: () => !exists,
 		isBlockDevice: () => false,
 		isCharacterDevice: () => false,
-		isSymbolicLink: () => VFS.isSymlink(normalizedPath),
-
+		isSymbolicLink: () => false,
 		isFIFO: () => false,
 		isSocket: () => false,
 		dev: 0,
@@ -323,7 +342,7 @@ function unlinkSync(path: string | Buffer | URL): void {
 
 function rmdirSync(path: string | Buffer | URL): void {
 	const normalizedPath = normalizePath(path.toString());
-
+	VFS.unlink(normalizedPath);
 	// Not supported in the vfs, but can be implemented if needed.
 }
 
@@ -333,7 +352,7 @@ function lstatSync(path: string | Buffer | URL): Stats {
 
 	return {
 		isFile: () => exists,
-		isDirectory: () => !exists,
+		isDirectory: () => VFS.directoryExists(normalizedPath),
 		isBlockDevice: () => false,
 		isCharacterDevice: () => false,
 		isSymbolicLink: () => VFS.isSymlink(normalizedPath),
@@ -378,7 +397,6 @@ function fstatSync(fd: number): Stats {
 function readlinkSync(path: string | Buffer | URL): string | null {
 	return VFS.readlink(path.toString());
 }
-
 type EventListener = (...args: any[]) => void;
 
 function lstat(path: string | Buffer | URL): Promise<Stats> {
@@ -398,8 +416,16 @@ function openSync(
 	flags: string | number,
 	mode?: number,
 ): number {
-	// Not supported in the vfs, but can be implemented if needed.
-	throw new Error("openSync is not supported in the vfs");
+	const normalizedPath = normalizePath(path.toString());
+	const openFlags = typeof flags === "string" ? flags : flags.toString();
+
+	if (openFlags.includes("w")) {
+		VFS.writeFile(normalizedPath, "");
+	}
+	const fd = Math.random() * 1000;
+	OPEN_FD_MAP.set(normalizedPath, fd);
+	FD_MAP.set(fd, normalizedPath);
+	return fd;
 }
 
 function readdir(path: string | Buffer | URL): Promise<string[]> {
@@ -454,6 +480,7 @@ const rw = {
 	readdir,
 	readdirSync,
 	realpath,
+	normalizePath,
 	realpathSync,
 	stat,
 	statSync,
@@ -471,12 +498,13 @@ const rw = {
 	readlinkSync,
 	watch,
 	writeFile,
+	getDirectories,
 	mkdirSync,
 	createReadStream,
 	createWriteStream,
 	exists,
 	close,
-
+	writeSync,
 	open,
 	symlink,
 	closeSync,
@@ -499,6 +527,10 @@ rw.realpath.native = (path, options, callback) => {
 rw.realpathSync.native = (path, options) => {
 	return resolve(path);
 };
+
+function getDirectories() {
+	return VFS.getDirectories("/");
+}
 
 const proxy = new Proxy(
 	{ [S]: () => {}, ...rw },
@@ -524,6 +556,7 @@ const {
 	readFile: _readFile,
 	readFileSync: _readFileSync,
 	existsSync: _existsSync,
+	getDirectories: _getDirectories,
 	lstat: _lstat,
 	openSync: _openSync,
 	watchFile: _watchFile,
@@ -531,6 +564,7 @@ const {
 	realpath: _realpath,
 	readdirSync: _readdirSync,
 	realpathSync: _realpathSync,
+	normalizePath: _normalizePath,
 	stat: _stat,
 	statSync: _statSync,
 	close: _close,
@@ -560,6 +594,7 @@ const {
 	watch: _watch,
 	writeFile: _writeFile,
 	mkdirSync: _mkdirSync,
+	writeSync: _writeSync,
 	writeFileSync: _writeFileSync,
 	readdirSyncWithFileTypes: _readdirSyncWithFileTypes,
 } = proxy;
@@ -575,6 +610,7 @@ export {
 	_readdirSync as readdirSync,
 	_realpathSync as realpathSync,
 	_stat as stat,
+	_getDirectories as getDirectories,
 	_close as close,
 	_statSync as statSync,
 	_accessSync as accessSync,
@@ -587,10 +623,12 @@ export {
 	_createWriteStream as createWriteStream,
 	_exists as exists,
 	_open as open,
+	_normalizePath as normalizePath,
 	_symlink as symlink,
 	_closeSync as closeSync,
 	_fchmodSync as fchmodSync,
 	_fchownSync as fchownSync,
+	_writeSync as writeSync,
 	_fsyncSync as fsyncSync,
 	_ftruncateSync as ftruncateSync,
 	_futimesSync as futimesSync,

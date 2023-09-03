@@ -4,10 +4,10 @@
  * We need to control certain aspects of what can be done, what functionality can be used, etc.
  */
 // @ts-ignore
-import typescript from "../node_modules/typescript/lib/tsserverlibrary.js";
+import typescript = require("typescript/lib/typescript.js");
 const { createLanguageService: createLanguageService2 } = typescript;
 
-const sys = typescript.sys;
+const sys = { ...typescript.sys } as typescript.System;
 let ts = {
 	...typescript,
 	getDefaultLibFilePath() {
