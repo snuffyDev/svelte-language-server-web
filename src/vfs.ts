@@ -17,6 +17,7 @@ import _path from "./deps/path-deno";
 import json from "./libs.json";
 import { addKitToDefaultExport, extractKitProperty } from "./vfs.utils";
 import { syncFiles } from "./features/workspace";
+import { basename } from "path";
 
 type EventListener = (
 	eventType: WatchEventType | "close" | "error",
@@ -152,7 +153,9 @@ class VFSImpl extends EventEmitter.EventEmitter {
 	}
 
 	public getDirectories(path: string) {
-		return [...directories.keys()] as string[];
+		return [...directories.keys()].filter(
+			(dir: string) => basename(dir) === basename(VFS.normalize(path)),
+		) as string[];
 	}
 
 	public isSymlink(path: string) {
@@ -170,6 +173,14 @@ class VFSImpl extends EventEmitter.EventEmitter {
 		);
 	}
 
+	public readDirectoryRaw(path: string) {
+		let files = [...sys.entries()]
+			.filter(([name, file]) => name.startsWith(this.normalize(path)))
+			.map(
+				([name, file]) => [name, file.type] as [name: string, type: FileType],
+			);
+		return files;
+	}
 	public readDirectory(
 		path: string,
 		extensions?: readonly string[],

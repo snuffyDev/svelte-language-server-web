@@ -1,3 +1,20 @@
+/**
+ * This TypeScript module implements a language server for providing features such as code completion,
+ * diagnostics, hover information, and more for TypeScript and JavaScript files. It utilizes the
+ * "vscode-languageserver" protocol and integrates with the TypeScript language service.
+ *
+ * Overview:
+ * - Imports necessary dependencies and modules for various functionalities.
+ * - Defines a "Document" class to manage text documents and their content.
+ * - Implements helper functions for converting TypeScript element kinds, display parts, and JSDoc tags.
+ * - Entry point: "createServer" function initializes the language server's capabilities and event listeners.
+ * - Language service is set up using the "createLanguageService" function with custom hosts and compiler options.
+ * - Listens for initialization, open, change, completion, and hover events from the client.
+ * - Performs syntax and semantic analysis to generate diagnostics for displayed issues.
+ * - Integrates with the TypeScript language service for code completion, quick info, and diagnostics.
+ * - Establishes connection, handles requests, and listens for events using the "vscode-languageserver" library.
+ */
+
 import ts from "typescript";
 import {
 	CompletionItemKind,
@@ -23,7 +40,9 @@ import { debounce, transformHoverResultToHtml } from "../utils";
 import { VFS } from "src/vfs";
 import { getTextInRange } from "./documents/utils";
 import { WritableDocument } from "./documents/WritableDocument";
-import { basename } from "path";
+import { basename, join } from "path";
+import { FileType } from "vscode-html-languageservice";
+import { URI } from "vscode-uri";
 
 export function scriptElementKindToCompletionItemKind(
 	kind: ts.ScriptElementKind,
@@ -129,7 +148,59 @@ class Document extends WritableDocument {
 		this.content = text;
 	}
 }
-let currentDir = "";
+
+let currentDir = "/";
+
+const matchFiles: (
+	path: string,
+	extensions: readonly string[] | undefined,
+	excludes: readonly string[] | undefined,
+	includes: readonly string[] | undefined,
+	useCaseSensitiveFileNames: boolean,
+	currentDirectory: string,
+	depth: number | undefined,
+	getFileSystemEntries: (path: string) => {
+		files: readonly string[];
+		directories: readonly string[];
+	},
+	realpath: (path: string) => string,
+) => string[] = (ts as any).matchFiles;
+
+// from: https://github.com/microsoft/vscode/blob/main/extensions/typescript-language-features/web/webServer.ts#L491
+function getAccessibleFileSystemEntries(path: string): {
+	files: readonly string[];
+	directories: readonly string[];
+} {
+	const uri = path;
+	let entries: [string, FileType][] = [];
+	const files: string[] = [];
+	const directories: string[] = [];
+	try {
+		entries = VFS.readDirectoryRaw(uri);
+	} catch (_e) {
+		try {
+			entries = VFS.readDirectoryRaw(
+				URI.file(join(uri, "node-modules")).toString(),
+			);
+		} catch (_e) {}
+	}
+	for (const [entry, type] of entries) {
+		// This is necessary because on some file system node fails to exclude
+		// '.' and '..'. See https://github.com/nodejs/node/issues/4002
+		if (entry === "." || entry === "..") {
+			continue;
+		}
+
+		if (type === FileType.File) {
+			files.push(entry);
+		} else if (type === FileType.Directory) {
+			directories.push(entry);
+		}
+	}
+	files.sort();
+	directories.sort();
+	return { files, directories };
+}
 export const createServer = ({ connection }: { connection: Connection }) => {
 	const docs: Record<string, WritableDocument> = {};
 
@@ -155,7 +226,12 @@ export const createServer = ({ connection }: { connection: Connection }) => {
 				"/",
 				{
 					allowJs: true,
+					baseUrl: ".",
+					allowNonTsExtensions: true,
 					target: ts.ScriptTarget.Latest,
+					noEmit: true,
+					declaration: false,
+					skipLibCheck: true,
 				},
 				"/tsconfig.json",
 			);
@@ -204,14 +280,24 @@ export const createServer = ({ connection }: { connection: Connection }) => {
 			getDefaultLibFileName: ts.getDefaultLibFilePath,
 			fileExists: VFS.fileExists.bind(VFS),
 			readFile: (path, encoding) => VFS.readFile(path, encoding).toString(),
-			readDirectory: (...args) => {
-				console.log(...args);
-				return [
-					...VFS.readDirectory("/").filter(
-						(path) => !path.includes("node_modules"),
-					),
-					...VFS.readDirectory.bind(VFS)(...args),
-				];
+			readDirectory(
+				path: string,
+				extensions?: readonly string[],
+				excludes?: readonly string[],
+				includes?: readonly string[],
+				depth?: number,
+			): string[] {
+				return matchFiles(
+					path,
+					extensions,
+					excludes,
+					includes,
+					/*useCaseSensitiveFileNames*/ true,
+					currentDir,
+					depth,
+					getAccessibleFileSystemEntries,
+					VFS.resolvePath,
+				);
 			},
 			getDirectories: (...args) => {
 				console.log(...args);
@@ -237,7 +323,6 @@ export const createServer = ({ connection }: { connection: Connection }) => {
 			},
 			getProjectVersion: () => projectVersion.toString(),
 			getNewLine: () => ts.sys.newLine,
-			...VFS,
 		};
 
 		let languageService = ts.createLanguageService(host);
@@ -399,7 +484,7 @@ export const createServer = ({ connection }: { connection: Connection }) => {
 				content,
 			);
 		}
-		currentDir = basename(filePath);
+		// currentDir = basename(filePath);
 		updateFile(filePath, content);
 		lintSystem(filePath);
 		syncFiles(filePath, content);

@@ -15,11 +15,11 @@ class TypedBroadcastChannel<T> extends BroadcastChannel {
 	) => void = super.addEventListener;
 }
 
-type FileTuple = [name: string, contents: string];
-const BC = new TypedBroadcastChannel<FileTuple[]>("sync-channel");
+type File = [name: string, contents: string];
+const BC = new TypedBroadcastChannel<File[]>("sync-channel");
 
-function removeDuplicateFiles(files: FileTuple[]): FileTuple[] {
-	const fileMap = new Map<string, FileTuple>();
+function removeDuplicateFiles(files: File[]): File[] {
+	const fileMap = new Map<string, File>();
 
 	for (const [name, contents] of files) {
 		// Only store the latest entry for each filename
@@ -42,8 +42,8 @@ export const handleFSSync = (
 ) => {
 	BC.onmessage = (event) => {
 		for (const [name, contents] of event.data) {
-			callback(name, contents);
 			VFS.writeFile(name, contents);
+			callback(name, contents);
 		}
 	};
 };
