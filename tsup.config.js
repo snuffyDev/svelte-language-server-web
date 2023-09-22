@@ -6,21 +6,22 @@ import { nodeModulesPolyfillPlugin } from "esbuild-plugins-node-modules-polyfill
 import resolve from "esbuild-plugin-resolve";
 import { defineConfig } from "tsup";
 import { transform } from "esbuild";
+
 const require = createRequire(import.meta.url);
 const moduleShimmerName = "ModuleShimmer";
 const __dirname = path.resolve(".");
 
 const env = process.env.NODE_ENV || "development";
 const SVELTELAB_DIR = path.resolve(
-	"./../../Documents/GitHub/SvelteLab/src/lib/lsp/svelte",
+	"../SvelteLab/src/lib/lsp/svelte",
 );
 const DIST_DIR = path.resolve("./dist");
 const OUT_DIR =
 	env === "production"
 		? DIST_DIR
 		: env === "testing"
-		? DIST_DIR
-		: SVELTELAB_DIR;
+			? DIST_DIR
+			: SVELTELAB_DIR;
 
 /** @type {import('esbuild').Plugin} */
 const moduleShimmer = {
@@ -132,7 +133,7 @@ const moduleShimmer = {
 				};
 			},
 		);
-    build.onLoad({ filter: /.*/, namespace: moduleShimmerName }, (args) => {
+		build.onLoad({ filter: /.*/, namespace: moduleShimmerName }, (args) => {
 			const contents = moduleShims[args.path];
 
 			return { contents, loader: "ts", resolveDir: "node_modules" };
@@ -150,7 +151,7 @@ function createAliasPlugin(aliasConfig) {
 				replacement,
 			}));
 			// Handle the transform step
-      build.onLoad({ filter: /.*/, namespace: moduleShimmerName}, async (args) => {
+			build.onLoad({ filter: /.*/, namespace: moduleShimmerName }, async (args) => {
 				// Read the original file content
 				const source = await readFile(args.path, "utf8");
 				// Apply each alias in order
@@ -227,39 +228,25 @@ const aliases = [
 ];
 
 try {
-	// rmSync("./dist", { recursive: true });
 	rmSync(OUT_DIR, {
 		recursive: true,
 	});
-} catch (_a) {}
+} catch (_a) { }
 
 export default defineConfig({
 	esbuildPlugins: [
 		nodeModulesPolyfillPlugin({
-			modules: { buffer: true,
+			modules: {
+				buffer: true,
 				stream: true,
 				tty: true,
-				crypto: true,
-				 process: true, "node:process": true, util: true, net: true },
+				process: true, "node:process": true,
+			},
 			globals: { process: true, Buffer: true },
 		}),
 		moduleShimmer,
 		createAliasPlugin(aliases),
-		{
-			name: "umd2esm",
-			setup(build) {
-				build.onResolve(
-					{ filter: /(vscode-.*|estree-walker|jsonc-parser)/ },
-					(args) => {
-						const pathUmdMay = require.resolve(args.path, {
-							paths: [args.resolveDir],
-						});
-						const pathEsm = pathUmdMay.replace("/umd/", "/esm/");
-						return { path: pathEsm };
-					},
-				);
-			},
-		},
+
 		resolve({
 			"node:process": path.resolve("./module_shims/"),
 			process: path.resolve("./module_shims/"),
@@ -289,10 +276,8 @@ export default defineConfig({
 	banner: {
 		js: `const __filename = new URL(import.meta.url).pathname; `,
 	},
-	sourcemap: true,
 	platform: "browser",
 	external: ["@codemirror/state"],
-	// outdir: DIST_DIR,
 	outDir: OUT_DIR,
 	noExternal: [/.*/],
 	format: "esm",

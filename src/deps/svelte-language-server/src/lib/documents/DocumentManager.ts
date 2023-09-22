@@ -1,8 +1,8 @@
 import { EventEmitter } from "events";
 import {
-	TextDocumentContentChangeEvent,
-	TextDocumentItem,
-	VersionedTextDocumentIdentifier,
+  TextDocumentContentChangeEvent,
+  TextDocumentItem,
+  VersionedTextDocumentIdentifier,
 } from "vscode-languageserver/browser";
 import { Document } from "./Document";
 import { normalizeUri } from "../../utils";
@@ -15,130 +15,145 @@ export type DocumentEvent = "documentOpen" | "documentChange" | "documentClose";
  * Manages svelte documents
  */
 export class DocumentManager {
-	private emitter = new EventEmitter();
-	private openedInClient: FileSet;
-	private documents: FileMap<Document>;
-	private locked: FileSet;
-	private deleteCandidates: FileSet;
+  private emitter = new EventEmitter();
+  private documents: FileMap<Document>;
+  private locked: FileSet;
+  private deleteCandidates: FileSet;
 
-	constructor(
-		private createDocument: (
-			textDocument: Pick<TextDocumentItem, "text" | "uri">,
-		) => Document,
-		options: { useCaseSensitiveFileNames: boolean } = {
-			useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
-		},
-	) {
-		this.openedInClient = new FileSet(options.useCaseSensitiveFileNames);
-		this.documents = new FileMap(options.useCaseSensitiveFileNames);
-		this.locked = new FileSet(options.useCaseSensitiveFileNames);
-		this.deleteCandidates = new FileSet(options.useCaseSensitiveFileNames);
-	}
+  constructor(
+    private createDocument: (
+      textDocument: Pick<TextDocumentItem, "text" | "uri">
+    ) => Document,
+    options: { useCaseSensitiveFileNames: boolean } = {
+      useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+    }
+  ) {
+    this.documents = new FileMap(options.useCaseSensitiveFileNames);
+    this.locked = new FileSet(options.useCaseSensitiveFileNames);
+    this.deleteCandidates = new FileSet(options.useCaseSensitiveFileNames);
+  }
 
-	openDocument(textDocument: Pick<TextDocumentItem, "text" | "uri">): Document {
-		textDocument = {
-			...textDocument,
-			uri: normalizeUri(textDocument.uri),
-		};
+  openClientDocument(
+    textDocument: Pick<TextDocumentItem, "text" | "uri">
+  ): Document {
+    return this.openDocument(textDocument, /**openedByClient */ true);
+  }
 
-		let document: Document;
-		if (this.documents.has(textDocument.uri)) {
-			document = this.documents.get(textDocument.uri)!;
-			document.setText(textDocument.text);
-		} else {
-			document = this.createDocument(textDocument);
-			this.documents.set(textDocument.uri, document);
-			this.notify("documentOpen", document);
-		}
+  openDocument(
+    textDocument: Pick<TextDocumentItem, "text" | "uri">,
+    openedByClient: boolean
+  ): Document {
+    textDocument = {
+      ...textDocument,
+      uri: normalizeUri(textDocument.uri),
+    };
 
-		this.notify("documentChange", document);
+    let document: Document;
+    if (this.documents.has(textDocument.uri)) {
+      document = this.documents.get(textDocument.uri)!;
+      document.setText(textDocument.text);
+    } else {
+      document = this.createDocument(textDocument);
+      this.documents.set(textDocument.uri, document);
+      this.notify("documentOpen", document);
+    }
 
-		return document;
-	}
+    this.notify("documentChange", document);
+    document.openedByClient = openedByClient;
 
-	lockDocument(uri: string): void {
-		this.locked.add(normalizeUri(uri));
-	}
+    return document;
+  }
 
-	markAsOpenedInClient(uri: string): void {
-		this.openedInClient.add(normalizeUri(uri));
-	}
+  lockDocument(uri: string): void {
+    this.locked.add(normalizeUri(uri));
+  }
 
-	getAllOpenedByClient() {
-		return Array.from(this.documents.entries()).filter((doc) =>
-			this.openedInClient.has(doc[0]),
-		);
-	}
+  markAsOpenedInClient(uri: string): void {
+    const document = this.documents.get(normalizeUri(uri));
+    if (document) {
+      document.openedByClient = true;
+    }
+  }
 
-	isOpenedInClient(uri: string) {
-		return this.openedInClient.has(normalizeUri(uri));
-	}
+  getAllOpenedByClient() {
+    return Array.from(this.documents.entries()).filter(
+      (doc) => doc[1].openedByClient
+    );
+  }
 
-	releaseDocument(uri: string): void {
-		uri = normalizeUri(uri);
+  isOpenedInClient(uri: string) {
+    const document = this.documents.get(normalizeUri(uri));
+    return !!document?.openedByClient;
+  }
 
-		this.locked.delete(uri);
-		this.openedInClient.delete(uri);
-		if (this.deleteCandidates.has(uri)) {
-			this.deleteCandidates.delete(uri);
-			this.closeDocument(uri);
-		}
-	}
+  releaseDocument(uri: string): void {
+    uri = normalizeUri(uri);
 
-	closeDocument(uri: string) {
-		uri = normalizeUri(uri);
+    this.locked.delete(uri);
+    const document = this.documents.get(uri);
+    if (document) {
+      document.openedByClient = false;
+    }
+    if (this.deleteCandidates.has(uri)) {
+      this.deleteCandidates.delete(uri);
+      this.closeDocument(uri);
+    }
+  }
 
-		const document = this.documents.get(uri);
-		if (!document) {
-			throw new Error("Cannot call methods on an unopened document");
-		}
+  closeDocument(uri: string) {
+    uri = normalizeUri(uri);
 
-		this.notify("documentClose", document);
+    const document = this.documents.get(uri);
+    if (!document) {
+      throw new Error("Cannot call methods on an unopened document");
+    }
 
-		// Some plugin may prevent a document from actually being closed.
-		if (!this.locked.has(uri)) {
-			this.documents.delete(uri);
-		} else {
-			this.deleteCandidates.add(uri);
-		}
+    this.notify("documentClose", document);
 
-		this.openedInClient.delete(uri);
-	}
+    // Some plugin may prevent a document from actually being closed.
+    if (!this.locked.has(uri)) {
+      this.documents.delete(uri);
+    } else {
+      this.deleteCandidates.add(uri);
+    }
 
-	updateDocument(
-		textDocument: VersionedTextDocumentIdentifier,
-		changes: TextDocumentContentChangeEvent[],
-	) {
-		const document = this.documents.get(normalizeUri(textDocument.uri));
-		if (!document) {
-			throw new Error("Cannot call methods on an unopened document");
-		}
+    document.openedByClient = false;
+  }
 
-		for (const change of changes) {
-			let start = 0;
-			let end = 0;
-			if ("range" in change) {
-				start = document.offsetAt(change.range.start);
-				end = document.offsetAt(change.range.end);
-			} else {
-				end = document.getTextLength();
-			}
+  updateDocument(
+    textDocument: VersionedTextDocumentIdentifier,
+    changes: TextDocumentContentChangeEvent[]
+  ) {
+    const document = this.documents.get(normalizeUri(textDocument.uri));
+    if (!document) {
+      throw new Error("Cannot call methods on an unopened document");
+    }
 
-			document.update(change.text, start, end);
-		}
+    for (const change of changes) {
+      let start = 0;
+      let end = 0;
+      if ("range" in change) {
+        start = document.offsetAt(change.range.start);
+        end = document.offsetAt(change.range.end);
+      } else {
+        end = document.getTextLength();
+      }
 
-		this.notify("documentChange", document);
-	}
+      document.update(change.text, start, end);
+    }
 
-	on(name: DocumentEvent, listener: (document: Document) => void) {
-		this.emitter.on(name, listener);
-	}
+    this.notify("documentChange", document);
+  }
 
-	get(uri: string) {
-		return this.documents.get(normalizeUri(uri));
-	}
+  on(name: DocumentEvent, listener: (document: Document) => void) {
+    this.emitter.on(name, listener);
+  }
 
-	private notify(name: DocumentEvent, document: Document) {
-		this.emitter.emit(name, document);
-	}
+  get(uri: string) {
+    return this.documents.get(normalizeUri(uri));
+  }
+
+  private notify(name: DocumentEvent, document: Document) {
+    this.emitter.emit(name, document);
+  }
 }

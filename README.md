@@ -12,6 +12,7 @@ Based on/inspired by: https://github.com/asafamr/monaco-svelte/
 - Path aliases (`$lib/`, `@/`, or anything defined in `tsconfig.json/jsconfig.json`)
 - Automatic type acquisition (ATA)
   - You must send a `package.json` file (parsed) to the Worker for this feature to work.
+- TypeScript Language Server (for `.js/.ts` file intellisense)
 
 ## How it works
 
@@ -40,7 +41,7 @@ Using the worker:
 import { WorkerRPC } from "svelte-language-server-web";
 
 const worker = new Worker(new URL("./worker.ts", import.meta.url), {
-	type: "module",
+  type: "module",
 });
 const rpc = new WorkerRPC(worker, { rootUri: null, workspaceFolders: null }); // options: https://github.com/FurqanSoftware/codemirror-languageserver/blob/master/src/index.ts#L466-L476
 ```

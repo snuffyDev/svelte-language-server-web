@@ -23,7 +23,7 @@ function writeSync(
 	try {
 		if (!path) throw new Error("Invalid file descriptor");
 		VFS.writeFile(path, buffer.toString());
-	} finally {
+	} catch {
 		return -1;
 	}
 	return 1;

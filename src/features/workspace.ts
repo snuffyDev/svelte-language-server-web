@@ -2,48 +2,80 @@ import { VFS } from "../vfs";
 import { batchUpdates } from "../utils";
 
 class TypedBroadcastChannel<T> extends BroadcastChannel {
-	constructor(name: string) {
-		super(name);
-	}
-	postMessage(message: T): void {
-		super.postMessage(message);
-	}
-	onmessage: (message: MessageEvent<T>) => void;
-	addEventListener: (
-		type: "message",
-		listener: (message: MessageEvent<T>) => void,
-	) => void = super.addEventListener;
+  constructor(name: string) {
+    super(name);
+  }
+  postMessage(message: T): void {
+    super.postMessage(message);
+  }
+  onmessage: (message: MessageEvent<T>) => void;
+  addEventListener: (
+    type: "message",
+    listener: (message: MessageEvent<T>) => void
+  ) => void = super.addEventListener;
 }
 
 type File = [name: string, contents: string];
 const BC = new TypedBroadcastChannel<File[]>("sync-channel");
 
 function removeDuplicateFiles(files: File[]): File[] {
-	const fileMap = new Map<string, File>();
+  const fileMap = new Map<string, File>();
 
-	for (const [name, contents] of files) {
-		// Only store the latest entry for each filename
-		fileMap.set(name, [name, contents]);
-	}
+  for (const [name, contents] of files) {
+    // Only store the latest entry for each filename
+    fileMap.set(name, [name, contents]);
+  }
 
-	return Array.from(fileMap.values());
+  return Array.from(fileMap.values());
 }
 
-export const syncFiles = batchUpdates<[name: string, contents: string]>(
-	(files) => {
-		BC.postMessage(removeDuplicateFiles(files));
-	},
-	20,
-	500,
+export const syncFiles = batchUpdates<File>(
+  (files) => {
+    BC.postMessage(removeDuplicateFiles(files));
+  },
+  75,
+  100
 );
 
 export const handleFSSync = (
-	callback: (fileName: string, contents: string) => void,
+  callback: (fileName: string, contents: string) => void
 ) => {
-	BC.onmessage = (event) => {
-		for (const [name, contents] of event.data) {
-			VFS.writeFile(name, contents);
-			callback(name, contents);
-		}
-	};
+  const cb = batchUpdates<File>((...data) => {
+    for (const file of data[0]) {
+      for (const [name, contents] of file) {
+        console.log({ file, name, contents, data });
+        queueMicrotask(() => {
+          VFS.writeFile(name, contents);
+          callback(name, contents);
+        });
+      }
+    }
+  });
+  BC.onmessage = ({ data }) => cb(...data.values());
 };
+
+class Workspace {
+  static instance: Workspace;
+
+  static getInstance(): Workspace {
+    if (!Workspace.instance) {
+      Workspace.instance = new Workspace();
+    }
+    return Workspace.instance;
+  }
+
+  private constructor() {}
+
+  public notifyFileChanges = syncFiles;
+  public onFileChanges = handleFSSync;
+
+  public updateFile = (name: string, contents: string) => {
+    syncFiles(name, contents);
+  };
+
+  public getFile = (name: string) => {
+    return VFS.readFile(name, "utf-8");
+  };
+}
+
+export const workspace = Workspace.getInstance();

@@ -47,7 +47,7 @@ h1 {
 #app {
 	width: 100%;
 	display: grid;
-	grid-template-rows: 3rem 1fr;
+	grid-template-rows: auto 1fr;
 	/* flex-direction: column; */
 	/* max-width: 100%; */
 	min-height: 100%;
@@ -135,4 +135,13 @@ button:focus-visible {
 	button {
 		background-color: #f9f9f9;
 	}
+}
+
+nav {
+	display:grid;
+	grid-auto-flow: column;
+	grid-auto-columns: 1fr;
+	height: 100%;
+	overflow-x:auto;
+
 }
