@@ -7,6 +7,7 @@ import _ts, { CompilerOptions } from "typescript";
 const ts = _ts.default;
 
 import preprocess from "svelte-preprocess/dist/autoProcess.js";
+import preprocessJSON from "svelte-preprocess/package.json";
 import * as transformerTS from "svelte-preprocess/dist/transformers/typescript.js";
 import * as ppts from "svelte-preprocess/dist/processors/typescript.js";
 import * as transformerPOSTCSS from "svelte-preprocess/dist/transformers/postcss.js";
@@ -45,14 +46,20 @@ globalThis.require = function (req) {
     throw Error("Cannot require module " + req + ".");
 
   for (const imp of Object.keys(required)) {
-    if (typeof req === "string" && imp === req) return required[imp];
-    else if (
+    if (typeof req === "string" && imp === req) {
+      const m = required[imp];
+      if (req.endsWith(".json")) return m;
+      else return m;
+    } else if (
       typeof req === "string" &&
       req.startsWith(".") &&
       imp.startsWith(".") &&
       path.resolve(req).includes(path.resolve(imp))
-    )
-      return required[imp];
+    ) {
+      const m = required[imp];
+      if (req.endsWith(".json")) return m;
+      else return m;
+    }
   }
   console.debug("dynamic required missing", req);
 };
@@ -121,10 +128,8 @@ globalThis._importScripts = function (...args: any[]) {
 const required = {
   "prettier/package.json": { version: prettierVersion },
   "svelte/package.json": { version: svelteVersion },
-  "svelte-preprocess/package.json": { version: preprocess_version },
-  "/node_modules/svelte-preprocess/package.json": {
-    version: preprocess_version,
-  },
+  "svelte-preprocess/package.json": preprocessJSON,
+  "/node_modules/svelte-preprocess/package.json": preprocessJSON,
   "/node_modules/svelte/package.json": { version: preprocess_version },
   "svelte-preprocess/autoProcess.js": preprocess,
   "/node_modules/svelte-preprocess": preprocess.sveltePreprocess,
@@ -147,7 +152,7 @@ const required = {
   postcss: { ...postcss, default: postcss },
   "/node_modules/svelte/compiler": { ...svelte },
   "/node_modules/prettier/package.json": { version: "2.8.6" },
-  "/node_modules/svelte2tsx": "/node_modules/svelte2tsx/index.js",
+  svelte2tsx: "/node_modules/svelte2tsx/index.js",
   "/node_modules/prettier": prettier,
   "svelte/compiler.cjs": { ...svelte },
   "svelte/compiler.js": svelte,
@@ -177,7 +182,9 @@ globalThis.__importDefault = function (req) {
 
 // @ts-expect-error patching require.resolve
 globalThis.require.resolve = (x) =>
-  path.resolve(x.includes("node_modules") ? x : `/node_modules/${x}`);
+  x in required && x === "svelte2tsx"
+    ? (required[x] as string)
+    : path.resolve(x.includes("node_modules") ? x : `/node_modules/${x}`);
 globalThis.importSvelte = required["svelte/compiler"];
 globalThis.importSveltePreprocess = () => required["svelte-preprocess"];
 

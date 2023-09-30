@@ -91,8 +91,9 @@ class FSWatcherImpl extends EventEmitter.EventEmitter implements _FSWatcher {
   }
 
   private handleFileChange(eventType: string, changedPath: string) {
+    changedPath = VFS.normalize(changedPath);
     if (
-      (changedPath !== "/" && this.path.startsWith(changedPath)) ||
+      (changedPath !== "/" && this.path.includes(changedPath)) ||
       changedPath === this.path
     ) {
       const filename = changedPath;
@@ -115,10 +116,10 @@ class VFSImpl extends EventEmitter.EventEmitter {
   public readonly output: string[] = [];
 
   public getCurrentDirectory = () => {
-    return "/";
+    return process.cwd();
   };
   public getExecutingFilePath = () => {
-    return "/node_modules/typescript/lib/lib.d.ts";
+    return "/";
   };
 
   public tsConfig: { compilerOptions: ParsedTsconfig["options"] };
@@ -132,6 +133,7 @@ class VFSImpl extends EventEmitter.EventEmitter {
       curPath = _path.posix.join(curPath, dir);
       directories.add(_path.posix.join(curPath));
     }
+    sys.set(this.normalize(path), { content: "", type: FileType.Directory });
     return directories.add(this.normalize(path));
   }
 
@@ -167,7 +169,7 @@ class VFSImpl extends EventEmitter.EventEmitter {
       _path.posix.fromFileUrl(
         path.startsWith("file:///")
           ? path
-          : new URL(_path.posix.toFileUrl(_path.posix.resolve(path)))
+          : new URL(_path.posix.toFileUrl(_path.posix.resolve(path))).toString()
       )
     );
   }
@@ -355,9 +357,9 @@ export var VFS = new VFSWithFileWatching();
 
 for (const key in json) {
   const value = json[key] as string;
-
   VFS.writeFile(key, value);
 }
+VFS.writeFile("file:///svelte.config.js", getBaseSvelteConfig());
 
 for (const key in svelteTypes) {
   const value = svelteTypes[key] as string;
@@ -365,13 +367,41 @@ for (const key in svelteTypes) {
   VFS.writeFile(key, value);
 }
 
+// Create the tsConfig (should be done somewhere else!)
+if (!VFS.fileExists("/tsconfig.json"))
+  VFS.writeFile(
+    "/tsconfig.json",
+    `{
+	"compilerOptions": {
+		"target": "ESNext",
+		"useDefineForClassFields": true,
+		"module": "ESNext",
+		"lib": ["ES2020","ESNext", "DOM", "DOM.Iterable"],
+
+		/* Bundler mode */
+		"moduleResolution": "Node",
+		"resolveJsonModule": true,
+		"isolatedModules": true,
+		"noEmit": true,
+		"strict": true,
+    "allowJs": true,
+		"noUnusedLocals": true,
+		"skipLibCheck": true,
+		"noUnusedParameters": true,
+		"noFallthroughCasesInSwitch": true
+	},
+  "include": ["**/*.d.ts", "**/*.ts", "**/*.js", "**/*.svelte"],
+}
+`
+  );
+
 function getBaseSvelteConfig(): string {
   return `
 	import preprocess from 'svelte-preprocess';
 	export default {
 		// Consult https://svelte.dev/docs#compile-time-svelte-preprocess
 		// for more information about preprocessors
-		preprocess: preprocess({ typescript: true }),
+		preprocess: preprocess(),
 		}
 	`;
 }

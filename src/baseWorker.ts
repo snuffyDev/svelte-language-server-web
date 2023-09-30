@@ -17,12 +17,28 @@ import {
   type WorkerResponse,
   DeleteFileMessage,
 } from "./messages";
-import { fetchTypeDefinitionsFromCDN } from "./features/autoTypings";
+import {
+  PromisePool,
+  fetchTypeDefinitionsFromCDN,
+} from "./features/autoTypings";
 import { deepMerge } from "./worker.utils";
 import { handleFSSync, syncFiles } from "./features/workspace";
+import { JsonValue, PackageJson } from "type-fest";
+import ts from "typescript";
+import path from "path";
 
 addEventListener("messageerror", (e) => console.error(e));
 addEventListener("error", (e) => console.error(e));
+
+const pool = new PromisePool(10);
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+const originalCreateDirectory = VFS.createDirectory.bind(VFS);
+
+VFS.createDirectory = (dirPath: string) => {
+  ts.sys.createDirectory(path.posix.dirname(VFS.normalize(dirPath)));
+  return originalCreateDirectory(dirPath);
+};
 
 export const BaseWorker = (
   createServer: ({ connection }: { connection: Connection }) => void,
@@ -49,14 +65,56 @@ export const BaseWorker = (
 
     const handleFetchTypes = async (data: FetchTypesMessage) => {
       VFS.writeFile("/package.json", JSON.stringify(data.params));
+      let ambientTypes = "";
       try {
-        return fetchTypeDefinitionsFromCDN(data.params).then((types) => {
+        const json = data.params as PackageJson;
+        console.log({ json });
+        const devDepKeys = Object.keys(json.devDependencies || {});
+
+        const nodeModules = VFS.readDirectory("/node_modules").map((d) =>
+          d.replace("/node_modules/", "")
+        );
+
+        const node_key_length = "/node_modules/".length;
+        const dependencies = Object.keys(json)
+          .filter((key) => key.toLowerCase().includes("dependencies"))
+          .map((key) => ({ [key]: json[key] }));
+
+        const filteredDeps: JsonValue = {};
+        for (const dependencyObject of dependencies) {
+          const o = Object.keys(dependencyObject as Record<string, string>);
+          console.log({ o });
+          for (const key of o) {
+            if (!nodeModules.some((d) => d.startsWith(key))) {
+              filteredDeps[key] = dependencyObject[key];
+            }
+          }
+        }
+        console.log({ filteredDeps });
+        const filteredKeys = Object.keys(filteredDeps);
+        const hasSvelteKit = filteredKeys.includes("@sveltejs/kit");
+        const hasVite = filteredKeys.includes("vite");
+
+        if (hasSvelteKit) {
+          ambientTypes += `import "@sveltejs/kit/types"\n`;
+        }
+
+        if (hasVite) {
+          ambientTypes += `import "vite/client"\n`;
+        }
+
+        return fetchTypeDefinitionsFromCDN(filteredDeps).then((types) => {
           for (const [key, value] of types) {
             console.log({ key, value });
-            VFS.writeFile(`/node_modules/${key}/index.d.ts`, value);
+            const path = `/node_modules/${key}`;
+
+            VFS.writeFile(path, value);
           }
         });
-      } catch {}
+      } catch {
+      } finally {
+        VFS.writeFile(`/@@${Date.now()}+slsw--ambient.d.ts`, ambientTypes);
+      }
     };
     addEventListener("setup-completed", (event) => {
       const id = setupQueue.shift();
@@ -71,6 +129,7 @@ export const BaseWorker = (
       if (isRPCMessage(event.data)) {
         if (event.data.method === "@@fetch-types") {
           await handleFetchTypes(event.data).catch(console.error);
+          await tick();
           postMessage({
             method: "@@fetch-types",
             id: event.data.id,
@@ -90,11 +149,13 @@ export const BaseWorker = (
           return;
         }
         await updateVFS(event.data.params);
-
+        await tick();
         if (event.data.method === "@@setup") {
           console.log(`Setting up ${name} Language Server...`);
           setupQueue.push(event.data.id);
+          await tick();
           createServer({ connection: connection });
+          await tick();
           queueMicrotask(() => {
             postMessage({
               method: "@@setup",
@@ -114,43 +175,34 @@ export const BaseWorker = (
 
     async function updateVFS(params: Record<string, string>) {
       let updateTsconfig = false;
-      await new Promise<void>((resolve) => {
-        const fileNames = Object.keys(params).sort(
-          (a, b) => b.length - a.length
-        );
-        for (let i = 0; i < fileNames.length; i++) {
-          const fileName = fileNames[i];
-          const fileContents = params[fileName];
-          if (
-            !fileName.includes("node_modules") &&
-            (fileName.includes("jsconfig.json") ||
-              fileName.includes("tsconfig.json"))
-          ) {
-            updateTsconfig = true;
-            // Object.assign(
-            //   tsConfig,
-            //   deepMerge(
-            //     tsConfig,
-            //     JSON.parse(
-            //       fileContents.replace(
-            //         /\\"|"(?:\\"|[^"])*"|(\/\/.*|\/\*[\s\S]*?\*\/)/g,
-            //         (m, g) => (g ? "" : m)
-            //       )
-            //     )
-            //   )
-            // );
-          }
-          const isTsOrJsConfig =
-            fileName === "/tsconfig.json" || fileName === "/jsconfig.json";
-
-          Promise.resolve(VFS.writeFile(fileName, fileContents)).then(() => {
-            syncFiles(VFS.normalize(fileName), fileContents);
-            if (i === fileNames.length - 1) {
-              resolve();
-            }
-          });
+      const fileNames = Object.keys(params).sort((a, b) => b.length - a.length);
+      for (let i = 0; i < fileNames.length - 1; i++) {
+        const fileName = fileNames[i];
+        const fileContents = params[fileName];
+        if (
+          !fileName.includes("node_modules") &&
+          (fileName.includes("jsconfig.json") ||
+            fileName.includes("tsconfig.json"))
+        ) {
+          updateTsconfig = true;
+          // Object.assign(
+          //   tsConfig,
+          //   deepMerge(
+          //     tsConfig,
+          //     JSON.parse(
+          // fileContents.replace(
+          //   /\\"|"(?:\\"|[^"])*"|(\/\/.*|\/\*[\s\S]*?\*\/)/g,
+          //   (m, g) => (g ? "" : m)
+          // )
+          //     )
+          //   )
+          // );
         }
-      });
+        const isTsOrJsConfig =
+          fileName === "/tsconfig.json" || fileName === "/jsconfig.json";
+        VFS.writeFile(fileName, fileContents);
+        syncFiles(VFS.normalize(fileName), fileContents);
+      }
     }
   } catch (e) {
     console.error({ error: e });

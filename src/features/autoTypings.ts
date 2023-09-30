@@ -58,11 +58,14 @@ export class PromisePool {
   }
 }
 
-const pool = new PromisePool(20);
+const pool = new PromisePool(5);
 const numberRegex = /[^\d\.]/gm;
 let packageRetryTracker = {};
 
-const HEAD_REQUEST = (packageName: string, version: string) => {
+const HEAD_REQUEST = (
+  packageName: string,
+  version: string
+): Promise<[string, string][]> => {
   if (packageRetryTracker[packageName] > 2) {
     return null;
   }
@@ -71,28 +74,32 @@ const HEAD_REQUEST = (packageName: string, version: string) => {
     `https://data.jsdelivr.com/v1/packages/npm/${packageName}${
       version ? `@${version}` : ""
     }?structure=flat`
-  )
-    .then(async (res) => {
-      if (res.status >= 400) {
-        packageRetryTracker[packageName]++;
+  ).then(async (res) => {
+    if (res.status >= 400) {
+      packageRetryTracker[packageName]++;
 
-        return HEAD_REQUEST(packageName, "");
-      }
-      const data = await res.json();
-      const { files = [] } = data ?? {};
-      return (files || [])
-        .filter((file) => file && file?.name.includes(".d.ts"))
-        .map(({ name }) => `npm/${packageName}@${version}${name}`)
-        .join(",");
-    })
-    .then((path) => {
-      if (path) {
-        return fetch(`https://cdn.jsdelivr.net/combine/${path}`).then((r) =>
-          r.text()
-        );
-      }
-      return null;
-    });
+      return HEAD_REQUEST(packageName, "");
+    }
+    const data = await res.json();
+    const { files = [] } = data ?? {};
+    return await Promise.all(
+      (files || [])
+        .filter(
+          (file) =>
+            file &&
+            file?.name &&
+            (!file.name.endsWith(".js") || !file.name.endsWith(".md"))
+        )
+        .map(async ({ name }) => [
+          `${packageName}${name}`,
+          await fetch(
+            `https://cdn.jsdelivr.net/npm/${packageName}@${version}${name}`
+          )
+            .then((r) => r.text())
+            .catch(() => ""),
+        ])
+    );
+  });
 };
 
 const DEPENDENCY_KEYS = [
@@ -112,18 +119,27 @@ export const fetchTypeDefinitionsFromCDN = async (packageJSON: PackageJSON) => {
       Object.assign(dependencies, rest);
     }
   }
-  const types = await Promise.all(
+  const types = await Promise.allSettled(
     Object.keys(dependencies).map((name) =>
       pool.add(async () => {
         const version = dependencies[name];
-        const text = await HEAD_REQUEST(name, version.replace(numberRegex, ""));
-        if (text) {
+        const results = await HEAD_REQUEST(
+          name,
+          version.replace(numberRegex, "")
+        );
+        if (results) {
           KNOWN_MODULE_CACHE.add(name);
-          return [name, text];
+          return results;
         }
       })
     )
-  );
+  ).then((results) => {
+    const fulfilledResults = results.filter(
+      (result): result is PromiseFulfilledResult<[string, string][]> =>
+        result.status === "fulfilled"
+    );
+    return fulfilledResults.flatMap((result) => result.value);
+  });
   packageRetryTracker = {};
   return (types || []).filter(Boolean) as [pkgName: string, dts: string][];
 };

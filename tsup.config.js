@@ -11,7 +11,7 @@ const require = createRequire(import.meta.url);
 const moduleShimmerName = "ModuleShimmer";
 const __dirname = path.resolve(".");
 
-const env = process.env.NODE_ENV || "development";
+const env = process.env.NODE_ENV || "production";
 const SVELTELAB_DIR = path.resolve(
 	"../SvelteLab/src/lib/lsp/svelte",
 );
@@ -218,10 +218,6 @@ const aliases = [
 		replacement: path.resolve("./module_shims/os.ts"),
 	},
 	{
-		find: /^process$/,
-		replacement: path.resolve("./module_shims/process.ts"),
-	},
-	{
 		find: /^stylus$/,
 		replacement: path.resolve("./module_shims/stylus.ts"),
 	},
@@ -240,34 +236,52 @@ export default defineConfig({
 				buffer: true,
 				stream: true,
 				tty: true,
-				process: true, "node:process": true,
+				net: true,
+				punycode: true,
+				http: true,
+				https: true,
+				tls: true,
+				zlib: true,
+				inspector: true,
+				process: true,
+				"node:process": true,
 			},
 			globals: { process: true, Buffer: true },
 		}),
 		moduleShimmer,
 		createAliasPlugin(aliases),
 
+		{
+			name: "umd2esm",
+			setup(build) {
+				build.onResolve(
+					{ filter: /(vscode-.*|jsonc-parser)/ },
+					(args) => {
+						const pathUmdMay = require.resolve(args.path, {
+							paths: [args.resolveDir],
+						});
+						const pathEsm = pathUmdMay.replace("/umd/", "/esm/");
+						return { path: pathEsm };
+					},
+				);
+			},
+		},
 		resolve({
-			"node:process": path.resolve("./module_shims/"),
-			process: path.resolve("./module_shims/"),
 			fs: path.resolve("./module_shims/"),
 			"graceful-fs": path.resolve("./module_shims"),
 		}),
 	],
 	esbuildOptions(options, context) {
+
 		options.define = {
 			global: "globalThis",
 			__dirname: '""',
 			_self: "globalThis",
-			__filename: '""',
 			require: "require",
 			setImmediate: "queueMicrotask",
 			define: "null",
 			importScripts: "_importScripts",
-			importSvelte: "_importSvelte",
-			importSveltePreprocess: "_importSveltePreprocess",
 			importPrettier: "_importPrettier",
-			sorcery_1: "_sorceryShim",
 			__importStar: "__importStar",
 
 			__importDefault: "__importDefault",
@@ -285,19 +299,16 @@ export default defineConfig({
 		global: "globalThis",
 		__dirname: '""',
 		_self: "globalThis",
-		__filename: '""',
 		require: "require",
 		setImmediate: "queueMicrotask",
 		define: "null",
 		importScripts: "_importScripts",
-		importSvelte: "_importSvelte",
-		importSveltePreprocess: "_importSveltePreprocess",
 		importPrettier: "_importPrettier",
-		sorcery_1: "_sorceryShim",
 		__importStar: "__importStar",
 
 		__importDefault: "__importDefault",
 	},
+
 	bundle: true,
 	tsconfig: "./tsconfig.build.json",
 	minifySyntax: true,
@@ -308,6 +319,10 @@ export default defineConfig({
 	minify: true,
 	treeshake: true,
 	dts: true,
+	env: {
+		NODE_ENV: "production",
+	},
+	replaceNodeEnv: false,
 	entryPoints: [
 		// ...glob.sync("./module_shims/*.ts", { absolute: true }),
 		"./src/index.ts",

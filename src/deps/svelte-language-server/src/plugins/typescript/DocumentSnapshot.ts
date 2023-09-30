@@ -237,7 +237,7 @@ function preprocessSvelteFile(
 
   try {
     const tsx = svelte2tsx(text, {
-      filename: document.getFilePath() ?? undefined,
+      filename: document.url ?? undefined,
       isTsFile: scriptKind === ts.ScriptKind.TS,
       mode: "ts",
       typingsNamespace: options.typingsNamespace,
@@ -302,7 +302,7 @@ function preprocessSvelteFile(
 export class SvelteDocumentSnapshot implements DocumentSnapshot {
   private mapper?: DocumentMapper;
   private lineOffsets?: number[];
-  private url = pathToUrl(this.filePath);
+  private url = this.parent.uri;
 
   version = this.parent.version;
 

@@ -239,7 +239,7 @@ function readFileSync(
 ): string | Buffer | undefined {
 	const normalizedPath = normalizePath(path.toString());
 	const encoding = typeof options === "string" ? options : options || "utf8";
-	return VFS.readFile(normalizedPath, encoding) || Buffer.from([]);
+	return VFS.readFile(normalizedPath, encoding) ?? undefined;
 }
 
 function writeFileSync(

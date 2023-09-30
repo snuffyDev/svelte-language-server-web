@@ -1,5 +1,5 @@
 import { FSWatcher, watch } from "chokidar";
-import { debounce } from "lodash";
+import { debounce } from "lodash-es";
 import { join, posix } from "path";
 import {
   DidChangeWatchedFilesParams,

@@ -9,14 +9,12 @@ import PostMessageWorkerTransport from "./transport";
 import { WorkerMessage, WorkerRPCMethod, WorkerResponse } from "./messages";
 import { LanguageServerClient } from "codemirror-languageserver/";
 import type { Transport } from "@open-rpc/client-js/build/transports/Transport";
+import type { PackageJson } from "type-fest";
 
 type LanguageServerClientOptions = Exclude<
   ConstructorParameters<typeof LanguageServerClient>["0"],
   "transport"
 >;
-
-// create a fully typed package.json type
-type PackageJson = Record<string, unknown>;
 
 interface ITransportEvents {
   error: (data: JSONRPCError) => void;

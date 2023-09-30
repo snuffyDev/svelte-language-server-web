@@ -33,8 +33,8 @@ export const syncFiles = batchUpdates<File>(
   (files) => {
     BC.postMessage(removeDuplicateFiles(files));
   },
-  75,
-  100
+  50,
+  50
 );
 
 export const handleFSSync = (
@@ -43,11 +43,9 @@ export const handleFSSync = (
   const cb = batchUpdates<File>((...data) => {
     for (const file of data[0]) {
       for (const [name, contents] of file) {
-        console.log({ file, name, contents, data });
-        queueMicrotask(() => {
-          VFS.writeFile(name, contents);
-          callback(name, contents);
-        });
+        // console.log({ file, name, contents, data });
+        VFS.writeFile(name, contents);
+        callback(VFS.normalize(name), contents);
       }
     }
   });

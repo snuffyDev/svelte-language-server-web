@@ -191,22 +191,28 @@ export class ConfigLoader {
   private async loadConfig(configPath: string, directory: string) {
     try {
       const configFile = this.fs.readFileSync(configPath);
-      const processor = {};
-      const reqPreProcess = globalThis.__importDefault(`svelte-preprocess`);
+      let processor = "export default (() => {\n";
+      const reqPreProcess = await import(`svelte-preprocess`);
       for (const key in reqPreProcess.default) {
-        processor[key] = `${reqPreProcess.default[key].toString()}`;
+        const result = `const ${key} = ${reqPreProcess.default[
+          key
+        ].toString()};\n;`;
+        processor += result;
       }
+      processor += "\nreturn {";
+      for (const key in reqPreProcess.default) {
+        processor += `${key},`;
+      }
+
+      processor += "\n}});";
       console.log({ processor });
       // convert processor to a base64 string, while keeping the functions intact
-      const processorString = `export default () => (${JSON.stringify(
-        processor
-      )})`;
-      console.log({ processorString });
+
       // convert the base64 string into a data url
 
       // convert the data url into a object url
       const processorObjectUrl = globalThis.URL.createObjectURL(
-        new Blob([processorString], { type: "application/javascript" })
+        new Blob([processor], { type: "application/javascript" })
       );
       /** @vite-ignore */
 
@@ -224,11 +230,11 @@ export class ConfigLoader {
           )?.default;
       // console.log({ config });		if (args.join("") === "modulePathreturn import(modulePath)")
 
-      for (const key in config.preprocess) {
-        config.preprocess[key] = new Function(
-          "return " + config.preprocess[key]
-        )();
-      }
+      // for (const key in config.preprocess) {
+      //   config.preprocess[key] = new Function(
+      //     "return " + config.preprocess[key]
+      //   )();
+      // }
       if (!config) {
         throw new Error(
           'Missing exports in the config. Make sure to include "export default config" or "module.exports = config"'
@@ -307,10 +313,11 @@ export class ConfigLoader {
         : "No svelte.config.js found. ") +
         "Using https://github.com/sveltejs/svelte-preprocess as fallback"
     );
-    const processor = importSveltePreprocess(path);
+    const processor = await import("svelte-preprocess");
+    console.log({ processor });
     /** @vite-ignore */
     return {
-      preprocess: processor({
+      preprocess: processor.default({
         // 4.x does not have transpileOnly anymore, but if the user has version 3.x
         // in his repo, that one is loaded instead, for which we still need this.
         typescript: <any>{

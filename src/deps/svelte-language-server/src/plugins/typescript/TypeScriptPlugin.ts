@@ -103,6 +103,7 @@ import {
   symbolKindFromString,
 } from "./utils";
 import { CallHierarchyProviderImpl } from "./features/CallHierarchyProvider";
+import { URI } from "vscode-uri";
 
 export class TypeScriptPlugin
   implements
@@ -390,6 +391,8 @@ export class TypeScriptPlugin
     document: Document,
     position: Position
   ): Promise<DefinitionLink[]> {
+		const { scheme, authority } = URI.parse(document.getURL());
+
     const { lang, tsDoc } = await this.getLSAndTSDoc(document);
 
     const defs = lang.getDefinitionAndBoundSpan(
@@ -435,7 +438,7 @@ export class TypeScriptPlugin
           def.textSpan
         );
         return LocationLink.create(
-          defLocation.uri,
+          URI.from({ scheme, authority, path: def.fileName }).toString(),
           defLocation.range,
           defLocation.range,
           convertToLocationRange(tsDoc, defs.textSpan)

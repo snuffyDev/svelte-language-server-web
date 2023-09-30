@@ -4,23 +4,23 @@ import prettier from "prettier";
 
 //@ts-ignore
 prettier.resolveConfig = async (
-	filePath: string,
-	options?: prettier.ResolveConfigOptions | undefined,
+  filePath: string,
+  options?: prettier.ResolveConfigOptions | undefined
 ) => null;
 //@ts-ignore
 prettier.resolveConfig.sync = (
-	filePath: string,
-	options?: prettier.ResolveConfigOptions | undefined,
+  filePath: string,
+  options?: prettier.ResolveConfigOptions | undefined
 ) => null;
 //@ts-ignore
 prettier.getFileInfo = async (
-	filePath: string,
-	options?: prettier.FileInfoOptions | undefined,
+  filePath: string,
+  options?: prettier.FileInfoOptions | undefined
 ) => <prettier.FileInfoResult>{ ignored: false, inferredParser: "svelte" };
 
 prettier.getFileInfo.sync = (
-	filePath: string,
-	options?: prettier.FileInfoOptions | undefined,
+  filePath: string,
+  options?: prettier.FileInfoOptions | undefined
 ) => <prettier.FileInfoResult>{ ignored: false, inferredParser: "svelte" };
 
 //@ts-ignore
@@ -36,16 +36,16 @@ declare var prettierPlugins: any;
 
 const _pformat = prettier.format;
 prettier.format = (source: string, options?: import("prettier").Options) =>
-	_pformat(source, {
-		...(options || {}),
-		plugins: [
-			prettier_plugin_svelte,
-			prettier_babel,
-			prettier_css,
-			prettier_ts,
-			prettier_html,
-		],
-	});
+  _pformat(source, {
+    ...(options || {}),
+    plugins: [
+      prettier_plugin_svelte,
+      prettier_babel,
+      prettier_css,
+      prettier_ts,
+      prettier_html,
+    ],
+  });
 
 export { prettier };
 export default prettier;

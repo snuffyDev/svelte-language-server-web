@@ -65,16 +65,34 @@ export function transformHoverResultToHtml(result: Hover) {
   if (Array.isArray(result.contents)) {
     result.contents = result.contents.map((v) => {
       return typeof v === "string"
-        ? marked.parse(v, { gfm: true, breaks: true })
+        ? marked.parse(v, {
+            gfm: true,
+            breaks: true,
+            mangle: false,
+            headerIds: false,
+          })
         : {
-            value: marked.parse(v.value, { breaks: true, gfm: true }),
+            value: marked.parse(v.value, {
+              breaks: true,
+              gfm: true,
+              mangle: false,
+              headerIds: false,
+            }),
             language: v.language,
           };
     });
   } else if (typeof result.contents === "string") {
-    result.contents = marked.parse(result.contents, { gfm: true });
+    result.contents = marked.parse(result.contents, {
+      gfm: true,
+      mangle: false,
+      headerIds: false,
+    });
   } else {
-    result.contents = marked.parse(result.contents.value, { gfm: true });
+    result.contents = marked.parse(result.contents.value, {
+      gfm: true,
+      mangle: false,
+      headerIds: false,
+    });
   }
   return result;
 }
@@ -121,6 +139,8 @@ export function throttleAsync<T extends (...args: any[]) => Promise<any>>(
           const { resolve, args } = queue.shift()!;
           resolve(await func(...args));
         }, wait);
+      } else {
+        resolve(undefined as never);
       }
     });
   };

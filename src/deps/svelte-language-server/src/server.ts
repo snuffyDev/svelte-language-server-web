@@ -123,9 +123,6 @@ export function startServer(options?: LSOptions) {
 
   handleFSSync((filename, contents) => {
     const uri = toFileUrl(filename).toString();
-    if (uri.includes("/node_modules/")) {
-      VFS.writeFile(uri, contents);
-    }
     if (uri.includes(".svelte") || uri.includes(".ts") || uri.includes(".js")) {
       if (VFS.fileExists(uri) === false) {
         VFS.writeFile(uri, contents);
@@ -220,10 +217,8 @@ export function startServer(options?: LSOptions) {
     configManager.updateClientCapabilities(evt.capabilities);
 
     pluginHost.initialize({
-      filterIncompleteCompletions:
-        !evt.initializationOptions?.dontFilterIncompleteCompletions,
-      definitionLinkSupport:
-        !!evt.capabilities.textDocument?.definition?.linkSupport,
+      filterIncompleteCompletions: false,
+      definitionLinkSupport: false,
     });
     // Order of plugin registration matters for FirstNonNull, which affects for example hover info
     pluginHost.register((sveltePlugin = new SveltePlugin(configManager)));
@@ -379,7 +374,6 @@ export function startServer(options?: LSOptions) {
 
   connection.onInitialized(() => {
     if (
-      !watcher &&
       configManager.getClientCapabilities()?.workspace?.didChangeWatchedFiles
         ?.dynamicRegistration
     ) {
@@ -428,6 +422,12 @@ export function startServer(options?: LSOptions) {
   });
 
   connection.onDidOpenTextDocument((evt) => {
+    if (
+      !evt.textDocument.uri.endsWith(".svelte") ||
+      evt.textDocument.languageId !== "svelte"
+    ) {
+      return;
+    }
     const document = docManager.openClientDocument(evt.textDocument);
 
     if (VFS.fileExists(evt.textDocument.uri) === false) {
@@ -450,6 +450,10 @@ export function startServer(options?: LSOptions) {
       docManager.get(evt.textDocument.uri).getText()
     );
 
+    syncFiles<[name: string, content: string]>(
+      new URL(evt.textDocument.uri).pathname,
+      docManager.get(evt.textDocument.uri).getText()
+    );
     pluginHost.didUpdateDocument();
   });
   connection.onHover(async (evt) => {

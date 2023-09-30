@@ -27,6 +27,9 @@ import {
   TextDocumentSyncKind,
   Range,
   CompletionParams,
+  Position,
+  HoverParams,
+  Hover,
 } from "vscode-languageserver/browser";
 
 import { handleFSSync, syncFiles } from "./../features/workspace";
@@ -50,6 +53,7 @@ import { basename, dirname, join } from "path";
 import { FileType } from "vscode-html-languageservice";
 import { URI } from "vscode-uri";
 import { getSemanticTokenLegends } from "./lib/semanticTokenLegend";
+import { debounceSameArg, debounceThrottle } from "./utils";
 
 export function scriptElementKindToCompletionItemKind(
   kind: ts.ScriptElementKind
@@ -136,7 +140,7 @@ class Document extends WritableDocument {
   }
 
   public get uri(): string {
-    return this._uri;
+    return URI.parse(this._uri).toString(true);
   }
 
   public getFilePath(): string {
@@ -208,6 +212,82 @@ function getAccessibleFileSystemEntries(path: string): {
   directories.sort();
   return { files, directories };
 }
+
+const sendFileSync = debounce<(filename: string, content: string) => void>(
+  (filename, content) => {
+    syncFiles(filename, content);
+  },
+  50
+);
+
+class Cache<T> {
+  protected readonly _cache: Map<string, T>;
+
+  private getKey(fileName: string): string {
+    return fileName;
+  }
+
+  public constructor(protected limit = 100) {
+    this._cache = new Map<string, T>();
+  }
+
+  public tryGet(fileName: string): T | undefined {
+    if (this._cache.has(this.getKey(fileName))) {
+      return this._cache.get(this.getKey(fileName));
+    }
+    return undefined;
+  }
+
+  public set(fileName: string, data: T) {
+    if (this._cache.size > this.limit) {
+      this._cache.delete(this._cache.keys().next().value);
+    }
+
+    this._cache.set(this.getKey(fileName), data);
+
+    return data;
+  }
+}
+
+class CompletionCache extends Cache<CompletionList> {
+  //@ts-expect-error override
+  protected override getKey(fileName: string, position: Position): string {
+    return `${fileName}:${position.line}:${position.character}`;
+  }
+
+  public constructor(limit = 100) {
+    super(limit);
+  }
+
+  //@ts-expect-error override
+  public override tryGet(
+    fileName: string,
+    position: Position
+  ): CompletionList | undefined {
+    if (this._cache.has(this.getKey(fileName, position))) {
+      return this._cache.get(this.getKey(fileName, position));
+    }
+    return undefined;
+  }
+
+  //@ts-expect-error override
+  public override set(
+    fileName: string,
+    position: Position,
+    list: CompletionList
+  ) {
+    if (this._cache.size > this.limit) {
+      this._cache.delete(this._cache.keys().next().value);
+    }
+
+    this._cache.set(this.getKey(fileName, position), list);
+
+    return list;
+  }
+}
+
+const completionCache = new CompletionCache();
+
 export const createServer = ({ connection }: { connection: Connection }) => {
   const docs: Record<string, WritableDocument> = {};
 
@@ -233,6 +313,7 @@ export const createServer = ({ connection }: { connection: Connection }) => {
         "/",
         {
           allowJs: true,
+          checkJs: true,
           baseUrl: ".",
           allowNonTsExtensions: true,
           target: ts.ScriptTarget.Latest,
@@ -246,7 +327,9 @@ export const createServer = ({ connection }: { connection: Connection }) => {
 
     const compilerOptions: ts.CompilerOptions = {
       ...getCompilerOptions().options,
+
       allowJs: true,
+      checkJs: true,
       baseUrl: ".",
       allowNonTsExtensions: true,
       target: ts.ScriptTarget.Latest,
@@ -257,6 +340,10 @@ export const createServer = ({ connection }: { connection: Connection }) => {
 
     const compilerHost = ts.createCompilerHost(compilerOptions);
 
+    const scriptFileNameCache = () => {
+      const __cache = new Cache<string[]>(10);
+      const getScriptFileNames = () => {};
+    };
     // const originalEmit = compilerHost(compilerHost);
     const host: ts.LanguageServiceHost = {
       log: (message) => console.debug(`[ts] ${message}`),
@@ -278,7 +365,6 @@ export const createServer = ({ connection }: { connection: Connection }) => {
       writeFile: (filename, content) => {
         ts.sys.writeFile(filename, content, false);
         VFS.writeFile(filename, content);
-        compilerHost.writeFile(filename, content, false);
       },
       realpath: realpathSync,
       getScriptVersion: function getScriptVersion(fileName) {
@@ -357,9 +443,9 @@ export const createServer = ({ connection }: { connection: Connection }) => {
       ) {
         fileVersions.set(fileName, (fileVersions.get(fileName) || 0) + 1);
         VFS.writeFile(fileName, content);
-        compilerHost.writeFile(fileName, content, false);
+        ts.sys.writeFile(fileName, content, false);
         projectVersion++;
-        debounce(() => syncFiles(fileName, content), 100);
+        sendFileSync(fileName, content);
       },
     };
 
@@ -368,7 +454,11 @@ export const createServer = ({ connection }: { connection: Connection }) => {
 
   let env = createLanguageService();
   handleFSSync((name, contents) => {
-    env.updateFile(normalizePath(name), contents);
+    if (name.endsWith(".ts") || name.endsWith(".js")) {
+      env.updateFile(normalizePath(name), contents);
+    } else {
+      VFS.writeFile(name, contents);
+    }
   });
   globalThis.localStorage = globalThis.localStorage ?? ({} as Storage);
 
@@ -377,17 +467,12 @@ export const createServer = ({ connection }: { connection: Connection }) => {
       capabilities: {
         textDocumentSync: {
           openClose: true,
-          change: TextDocumentSyncKind.Full,
+          change: TextDocumentSyncKind.Incremental,
           save: {
             includeText: false,
           },
         },
-        workspaceSymbolProvider: {
-          workDoneProgress: true,
-        },
-        documentFormattingProvider: true,
         completionProvider: {
-          resolveProvider: true,
           completionItem: { labelDetailsSupport: true },
           workDoneProgress: true,
           triggerCharacters: [
@@ -428,14 +513,8 @@ export const createServer = ({ connection }: { connection: Connection }) => {
           range: true,
           full: true,
         },
-
         referencesProvider: true,
         selectionRangeProvider: true,
-        linkedEditingRangeProvider: true,
-        implementationProvider: true,
-        typeDefinitionProvider: true,
-        inlayHintProvider: true,
-        callHierarchyProvider: true,
         hoverProvider: true,
       },
     };
@@ -456,10 +535,15 @@ export const createServer = ({ connection }: { connection: Connection }) => {
       includeCompletionsForModuleExports: true,
       triggerKind: params.context.triggerKind,
       includeCompletionsWithInsertText: true,
+      triggerCharacter: params.context.triggerCharacter as ts.CompletionsTriggerCharacter,
       useLabelDetailsInCompletionEntries: true,
       allowIncompleteCompletions: false,
+      includeAutomaticOptionalChainCompletions: true,
+      includeCompletionsWithSnippetText: true,
+      includeCompletionsWithClassMemberSnippets: true,
+      includeCompletionsWithObjectLiteralMethodSnippets: true,
     });
-    return {
+    const list = {
       items: result.entries
         .filter((v) => v !== null && v !== undefined)
         .map((entry) => {
@@ -471,6 +555,8 @@ export const createServer = ({ connection }: { connection: Connection }) => {
         }),
       isIncomplete: result.isIncomplete,
     };
+
+    return list;
   }
 
   function infoAtPosition(pos: number, filePath: string) {
@@ -479,71 +565,77 @@ export const createServer = ({ connection }: { connection: Connection }) => {
     return result;
   }
 
-  function lintSystem(filePath: string) {
-    if (!env) return;
+  const lintSystem = (() => {
+    const _lint = debounceThrottle<string>((filePath) => {
+      if (!env) return;
 
-    const SyntacticDiagnostics = env.getSyntacticDiagnostics(filePath);
-    const SemanticDiagnostic = env.getSemanticDiagnostics(filePath);
-    const SuggestionDiagnostics = env.getSuggestionDiagnostics(filePath);
+      const SyntacticDiagnostics = env.getSyntacticDiagnostics(filePath);
+      const SemanticDiagnostic = env.getSemanticDiagnostics(filePath);
+      const SuggestionDiagnostics = env.getSuggestionDiagnostics(filePath);
 
-    const diagnostics: Diagnostic[] = ([] as ts.DiagnosticWithLocation[])
-      .concat(SyntacticDiagnostics, SemanticDiagnostic, SuggestionDiagnostics)
-      .reduce((acc, result) => {
-        type ErrorMessageObj = {
-          messageText: string;
-          next?: ErrorMessageObj[];
-        };
-        type ErrorMessage = ErrorMessageObj | string;
+      type ErrorMessageObj = {
+        messageText: string;
+        next?: ErrorMessageObj[];
+      };
+      type ErrorMessage = ErrorMessageObj | string;
 
-        const messagesErrors = (message: ErrorMessage): string[] => {
-          if (typeof message === "string") return [message];
+      const messagesErrors = (message: ErrorMessage): string[] => {
+        if (typeof message === "string") return [message];
 
-          const messageList: string[] = [];
-          const getMessage = (loop: ErrorMessageObj) => {
-            messageList.push(loop.messageText);
+        const messageList: string[] = [];
+        const getMessage = (loop: ErrorMessageObj) => {
+          messageList.push(loop.messageText);
 
-            if (loop.next) {
-              loop.next.forEach((item) => {
-                getMessage(item);
-              });
-            }
-          };
-
-          getMessage(message);
-
-          return messageList;
+          if (loop.next) {
+            loop.next.forEach((item) => {
+              getMessage(item);
+            });
+          }
         };
 
-        const severity: Diagnostic["severity"][] = [
-          DiagnosticSeverity.Warning,
-          DiagnosticSeverity.Error,
-          DiagnosticSeverity.Information,
-          DiagnosticSeverity.Hint,
-        ];
+        getMessage(message);
 
-        messagesErrors(result.messageText).forEach((message) => {
-          acc.push({
-            range: _textSpanToRange(docs[`file://${filePath}`], result),
-            message,
-            source: result?.source || "ts",
-            severity: severity[result.category],
-            // actions: codeActions as any as Diagnostic["actions"]
-          });
-        });
+        return messageList;
+      };
+      const diagnostics: Diagnostic[] = ([] as ts.DiagnosticWithLocation[])
+        .concat(SyntacticDiagnostics, SemanticDiagnostic, SuggestionDiagnostics)
+        .reduce((acc, result) => {
+          const severity: Diagnostic["severity"][] = [
+            DiagnosticSeverity.Warning,
+            DiagnosticSeverity.Error,
+            DiagnosticSeverity.Information,
+            DiagnosticSeverity.Hint,
+          ];
 
-        return acc;
-      }, [] as Diagnostic[]);
+          const messages = messagesErrors(result.messageText);
+          for (const message of messages) {
+            acc.push({
+              range: _textSpanToRange(docs[`${filePath}`], result),
+              message,
+              source: result?.source || "ts",
+              severity: severity[result.category],
+              // actions: codeActions as any as Diagnostic["actions"]
+            });
+          }
 
-    // return { items: diagnostics };
-    connection.sendDiagnostics({ uri: `file://${filePath}`, diagnostics });
-  }
+          return acc;
+        }, [] as Diagnostic[]);
+
+      // return { items: diagnostics };
+      connection.sendDiagnostics({
+        uri: URI.file(filePath).toString(true),
+        diagnostics,
+      });
+    }, 1000);
+    return _lint;
+  })();
 
   connection.onDidOpenTextDocument((params) => {
     const filePath = normalizePath(params.textDocument.uri);
     const content = params.textDocument.text;
 
-    if (!docs[params.textDocument.uri]) {
-      docs[params.textDocument.uri] = new Document(
+    if (!docs[filePath]) {
+      docs[filePath] = new Document(
         params.textDocument.uri,
         params.textDocument.languageId,
         params.textDocument.version,
@@ -553,67 +645,71 @@ export const createServer = ({ connection }: { connection: Connection }) => {
     currentDir = dirname(filePath);
     updateFile(filePath, content);
     lintSystem(filePath);
-    syncFiles(filePath, content);
   });
 
-  connection.onDidChangeTextDocument((params) => {
-    const filePath = normalizePath(params.textDocument.uri);
-    const content = params.contentChanges[0].text;
-    docs[params.textDocument.uri].update(content, 0, content.length);
-    docs[params.textDocument.uri].version++;
+  connection.onDidChangeTextDocument(
+    debounceSameArg(
+      (params) => {
+        const filePath = normalizePath(params.textDocument.uri);
+        const content = params.contentChanges[0].text;
+        docs[filePath].update(content, 0, content.length);
+        docs[filePath].version++;
 
-    if (currentDir !== dirname(filePath)) {
-      currentDir = dirname(filePath);
-    }
-    updateFile(filePath, content);
-    lintSystem(filePath);
-
-    syncFiles(filePath, content);
-  });
+        if (currentDir !== dirname(filePath)) {
+          currentDir = dirname(filePath);
+        }
+        updateFile(filePath, content);
+        lintSystem(filePath);
+      },
+      (a, b) => a?.textDocument?.uri === b?.textDocument?.uri,
+      1000
+    )
+  );
 
   connection.onCompletion((params) => {
     const filePath = normalizePath(params.textDocument.uri);
 
     return autocompleteAtPosition(
-      docs[params.textDocument.uri].offsetAt(params.position),
+      docs[filePath].offsetAt(params.position),
       filePath,
       params
     );
   });
 
-  connection.onHover(
-    throttleAsync(async ({ textDocument, position }) => {
-      const filePath = normalizePath(textDocument.uri);
+  const onHover = debounce<(params: HoverParams) => Hover>((params) => {
+    const { textDocument, position } = params;
+    const filePath = normalizePath(textDocument.uri);
 
-      const sourceDoc = docs[textDocument.uri];
+    const sourceDoc = docs[filePath];
 
-      const info = infoAtPosition(sourceDoc.offsetAt(position), filePath);
+    const info = infoAtPosition(sourceDoc.offsetAt(position), filePath);
 
-      if (!info) {
-        return;
-      }
+    if (!info) {
+      return;
+    }
 
-      const documentation = displayPartsToString(info.documentation);
-      const tags = info.tags
-        ? info.tags.map((tag) => tagToString(tag)).join("  \n\n")
-        : "";
-      const contents = displayPartsToString(info.displayParts);
-      return transformHoverResultToHtml({
-        range: _textSpanToRange(docs[textDocument.uri], info.textSpan),
-        contents: [
-          {
-            language: "typescript",
-            value: "```typescript\n" + contents + "\n```\n",
-          },
-          {
-            language: "typescript",
+    const documentation = displayPartsToString(info.documentation);
+    const tags = info.tags
+      ? info.tags.map((tag) => tagToString(tag)).join("  \n\n")
+      : "";
+    const contents = displayPartsToString(info.displayParts);
+    return transformHoverResultToHtml({
+      range: _textSpanToRange(docs[filePath], info.textSpan),
+      contents: [
+        {
+          language: "typescript",
+          value: "```typescript\n" + contents + "\n```\n",
+        },
+        {
+          language: "typescript",
 
-            value: documentation + (tags ? "\n\n" + tags : ""),
-          },
-        ],
-      });
-    }, 100)
-  );
+          value: documentation + (tags ? "\n\n" + tags : ""),
+        },
+      ],
+    });
+  }, 1000);
+
+  connection.onHover(onHover);
 
   connection.listen();
 };

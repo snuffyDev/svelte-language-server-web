@@ -268,9 +268,19 @@ async function createLanguageService(
   try {
     // For when svelte2tsx/svelte-check is part of node_modules, for example VS Code extension
     svelteTsPath = dirname(require.resolve(docContext.ambientTypesSource));
+    console.log(
+      "docContext.ambientTypesSource",
+      docContext.ambientTypesSource,
+      { svelteTsPath }
+    );
   } catch (e) {
     // Fall back to dirname
     svelteTsPath = __dirname;
+    console.log(
+      "docContext.ambientTypesSource FALLBACK",
+      docContext.ambientTypesSource,
+      { svelteTsPath }
+    );
   }
   const sveltePackageInfo = getPackageInfo(
     "svelte",
@@ -296,6 +306,7 @@ async function createLanguageService(
         ]
   ).map((f) => tsSystem.resolvePath(resolve(svelteTsPath, f)));
 
+  console.log("svelteTsxFiles", svelteTsxFiles);
   let languageServiceReducedMode = false;
   let projectVersion = 0;
   let dirty = false;

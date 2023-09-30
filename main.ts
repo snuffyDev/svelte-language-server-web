@@ -19,7 +19,7 @@ import TSWorker from "./main_ts_worker?worker";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { marked } from "marked";
 import { markedHighlight } from "marked-highlight";
-import project from "./project.json";
+import projectRaw from "./project.json";
 import hljs from "highlight.js";
 
 marked.use({
@@ -34,7 +34,11 @@ const [button1, button2, button3] =
   nav!.querySelectorAll<HTMLButtonElement>("button");
 
 let currentTab = "";
-
+const projectS = projectRaw;
+console.log({ projectS });
+const project = Object.fromEntries(
+  Object.entries(projectS).map(([key, value]) => [key, unescape(value)])
+);
 const svelteWorker: Worker = new SvelteWorker();
 const tsWorker: Worker = new TSWorker();
 const hoverMarked = hoverTooltip((view, pos, side) => {
@@ -59,13 +63,17 @@ const hoverMarked = hoverTooltip((view, pos, side) => {
   };
 });
 
+const config = JSON.parse(
+  project["/tsconfig.json"].replace(
+    /\\"|"(?:\\"|[^"])*"|(\/\/.*|\/\*[\s\S]*?\*\/)/g,
+    (m, g) => (g ? "" : m)
+  )
+);
+
 const init_files = {
   "file:///package.json": project["/package.json"],
-  "file:///tsconfig.json": project["/tsconfig.json"],
   ...Object.fromEntries(
-    Object.entries(project)
-      .filter(([key]) => key.includes(".svelte-kit"))
-      .map(([key, value]) => [`file://${key}`, value])
+    Object.entries(project).map(([key, value]) => [`file://${key}`, value])
   ),
 };
 project;
@@ -91,17 +99,19 @@ const files = project;
 
     allowHTMLContent: true,
     autoClose: false,
-    languageId: "",
+    languageId: "typescript",
   });
 
+  await tsLanguageServer.addFiles(init_files);
+  // await svelteLanguageServer.addFiles(init_files);
   await svelteLanguageServer.fetchTypes(
     JSON.parse(init_files["file:///package.json"])
   );
-
-  await tsLanguageServer.setup(init_files);
-  await svelteLanguageServer.setup(init_files);
-  await tsLanguageServer.addFiles(files);
-  await svelteLanguageServer.addFiles(files);
+  // await tsLanguageServer.fetchTypes(
+  //   JSON.parse(init_files["file:///package.json"])
+  // );
+  await tsLanguageServer.setup(files);
+  await svelteLanguageServer.setup(files);
   // svelteLanguageServer.client().attachPlugin(tsLanguageServer.client());
   const states = new Map<`${keyof typeof files}`, EditorState>();
   let code = files["/src/routes/+page.svelte"];
@@ -126,24 +136,30 @@ const files = project;
       extensions: [
         basicSetup,
         watcher,
-        languageServerWithTransport({
-          transport: uri.endsWith(".svelte")
-            ? svelteLanguageServer
-            : tsLanguageServer,
-          documentUri: uri,
-          languageId: uri.endsWith(".svelte") ? "svelte" : "typescript",
-          workspaceFolders: null,
-          rootUri: "file:///",
-          allowHTMLContent: true,
-          autoClose: false,
-          client: (uri.endsWith(".svelte")
-            ? svelteLanguageServer
-            : tsLanguageServer
-          ).client(),
-        }),
+        ...(uri.endsWith(".svelte") ||
+        uri.endsWith(".ts") ||
+        uri.endsWith(".js")
+          ? [
+              languageServerWithTransport({
+                transport: uri.endsWith(".svelte")
+                  ? svelteLanguageServer
+                  : tsLanguageServer,
+                documentUri: `file://${uri}`,
+                languageId: uri.endsWith(".svelte") ? "svelte" : "typescript",
+                workspaceFolders: null,
+                rootUri: "file:///",
+                allowHTMLContent: true,
+                autoClose: false,
+                client: (uri.endsWith(".svelte")
+                  ? svelteLanguageServer
+                  : tsLanguageServer
+                ).client(),
+              }),
+            ]
+          : []),
         keymap.of(vscodeKeymap),
         oneDark,
-        uri.endsWith(".ts") ? typescriptLanguage : svelte(),
+        !uri.endsWith(".svelte") ? typescriptLanguage : svelte(),
         // hoverMarked,
       ],
     });
@@ -161,11 +177,13 @@ const files = project;
   });
   let i = 0;
 
-  for (const key in project) {
+  for (const key of Object.keys(project).sort()) {
+    if (key.includes(".svelte-kit")) continue;
     const button = document.createElement("button");
-    button.innerText = key.split("/").pop()!;
+    button.innerText = key;
     nav?.appendChild(button);
 
+    // states.set(key, createEditorState(key));
     button.onclick = () => {
       let oldTab = currentTab;
       currentTab = key;
@@ -183,9 +201,6 @@ const files = project;
       const newState = states.get(key);
 
       editor.setState(newState!);
-      editor.dispatch({
-        changes: { from: 0, to: editor.state.doc.length, insert: code },
-      });
     };
   }
   // Current document to display in the editor
