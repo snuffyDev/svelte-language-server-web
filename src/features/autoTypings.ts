@@ -58,9 +58,46 @@ export class PromisePool {
   }
 }
 
-const pool = new PromisePool(5);
+const pool = new PromisePool(15);
 const numberRegex = /[^\d\.]/gm;
 let packageRetryTracker = {};
+
+class ModuleCache {
+  private static instance: ModuleCache;
+  private cache!: Cache;
+
+  constructor() {}
+
+  static async init() {
+    if (ModuleCache.instance) {
+      return ModuleCache.instance;
+    }
+    const cache = await caches.open("@@slsw-module-cache");
+    const moduleCache = new ModuleCache();
+    moduleCache.cache = cache;
+    return moduleCache;
+  }
+
+  async has(pathname: string) {
+    return this.cache.match(pathname);
+  }
+
+  async get(url: string) {
+    const result = await this.cache.match(url);
+    if (result) {
+      return result;
+    }
+    return fetch(url).then((response) => {
+      if (response.status >= 400) {
+        throw new Error(`Failed to fetch ${url}`);
+      }
+      this.cache.put(url, response.clone());
+      return response;
+    });
+  }
+}
+
+let moduleCache: ModuleCache;
 
 const HEAD_REQUEST = (
   packageName: string,
@@ -70,36 +107,44 @@ const HEAD_REQUEST = (
     return null;
   }
   packageRetryTracker[packageName] = packageRetryTracker[packageName] || 0;
-  return fetch(
-    `https://data.jsdelivr.com/v1/packages/npm/${packageName}${
-      version ? `@${version}` : ""
-    }?structure=flat`
-  ).then(async (res) => {
-    if (res.status >= 400) {
-      packageRetryTracker[packageName]++;
+  return moduleCache
+    .get(
+      `https://data.jsdelivr.com/v1/packages/npm/${packageName}${
+        version ? `@${version}` : ""
+      }?structure=flat`
+    )
+    .then(async (res) => {
+      if (res.status >= 400) {
+        packageRetryTracker[packageName]++;
 
-      return HEAD_REQUEST(packageName, "");
-    }
-    const data = await res.json();
-    const { files = [] } = data ?? {};
-    return await Promise.all(
-      (files || [])
-        .filter(
-          (file) =>
-            file &&
-            file?.name &&
-            (!file.name.endsWith(".js") || !file.name.endsWith(".md"))
-        )
-        .map(async ({ name }) => [
-          `${packageName}${name}`,
-          await fetch(
-            `https://cdn.jsdelivr.net/npm/${packageName}@${version}${name}`
+        return HEAD_REQUEST(packageName, "");
+      }
+      const data = await res.json();
+      const { files = [], versions = [] } = data ?? {};
+      if (files.length === 0 && versions.length > 0) {
+        return HEAD_REQUEST(packageName, versions[0].version);
+      }
+      return await Promise.all(
+        (files || [])
+          .filter(
+            (file) =>
+              file &&
+              file?.name &&
+              (file.name.endsWith(".d.ts") ||
+                file.name.endsWith(".json") ||
+                file.name.endsWith(".lock"))
           )
-            .then((r) => r.text())
-            .catch(() => ""),
-        ])
-    );
-  });
+          .map(async ({ name }) => [
+            `${packageName}${name}`,
+            await moduleCache
+              .get(
+                `https://cdn.jsdelivr.net/npm/${packageName}@${version}${name}`
+              )
+              .then((r) => r.text())
+              .catch(() => ""),
+          ])
+      );
+    });
 };
 
 const DEPENDENCY_KEYS = [
@@ -113,6 +158,11 @@ const DEPENDENCY_KEYS = [
 
 export const fetchTypeDefinitionsFromCDN = async (packageJSON: PackageJSON) => {
   const dependencies: Record<string, string> = {};
+
+  if (!moduleCache) {
+    moduleCache = await ModuleCache.init();
+  }
+
   for (const key of DEPENDENCY_KEYS) {
     if (key in packageJSON) {
       const { svelte = undefined, ...rest } = packageJSON[key];
