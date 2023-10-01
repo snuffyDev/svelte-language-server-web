@@ -233,6 +233,7 @@ export default defineConfig({
 	esbuildPlugins: [
 		nodeModulesPolyfillPlugin({
 			modules: {
+				assert: true,
 				buffer: true,
 				stream: true,
 				tty: true,
@@ -313,7 +314,6 @@ export default defineConfig({
 	tsconfig: "./tsconfig.build.json",
 	minifySyntax: true,
 	minifyIdentifiers: true,
-	metafile: true,
 	splitting: true,
 	minifyWhitespace: true,
 	minify: true,

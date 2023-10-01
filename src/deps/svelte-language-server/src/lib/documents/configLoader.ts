@@ -133,7 +133,6 @@ export class ConfigLoader {
         ignore: ["**/node_modules/**", "**/.*/**"],
         onlyFiles: true,
       });
-      console.log({ pathResults });
       const someConfigIsImmediateFileInDirectory =
         pathResults.length > 0 &&
         pathResults.some((res) => !this.path.dirname(res));
@@ -205,7 +204,6 @@ export class ConfigLoader {
       }
 
       processor += "\n}});";
-      console.log({ processor });
       // convert processor to a base64 string, while keeping the functions intact
 
       // convert the base64 string into a data url
@@ -228,13 +226,7 @@ export class ConfigLoader {
               )}`
             )
           )?.default;
-      // console.log({ config });		if (args.join("") === "modulePathreturn import(modulePath)")
 
-      // for (const key in config.preprocess) {
-      //   config.preprocess[key] = new Function(
-      //     "return " + config.preprocess[key]
-      //   )();
-      // }
       if (!config) {
         throw new Error(
           'Missing exports in the config. Make sure to include "export default config" or "module.exports = config"'
@@ -271,7 +263,6 @@ export class ConfigLoader {
     while (currentDir !== nextDir) {
       const tryFindConfigPath = (ending: string) => {
         const path = this.path.join(currentDir, `svelte.config.${ending}`);
-        console.log({ path });
         return this.fs.existsSync(path) ? path : undefined;
       };
       const configPath =
@@ -314,7 +305,6 @@ export class ConfigLoader {
         "Using https://github.com/sveltejs/svelte-preprocess as fallback"
     );
     const processor = await import("svelte-preprocess");
-    console.log({ processor });
     /** @vite-ignore */
     return {
       preprocess: processor.default({
@@ -336,15 +326,3 @@ export const configLoader = new ConfigLoader(
   _path,
   _dynamicImport
 );
-console.log({ configLoader });
-
-function getBaseSvelteConfig(): string {
-  return `
-	import preprocess from 'svelte-preprocess';
-	export default {
-		// Consult https://svelte.dev/docs#compile-time-svelte-preprocess
-		// for more information about preprocessors
-		preprocess: preprocess({ typescript: true }),
-		}
-	`;
-}

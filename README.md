@@ -4,6 +4,8 @@ Svelte language server within a web worker.
 
 Based on/inspired by: https://github.com/asafamr/monaco-svelte/
 
+> Warning: this is highly experimental, and is _nearly_ production ready!
+
 ## Features
 
 - Uses latest packages for `typescript`, `svelte`, `svelte-preprocess`, etc.

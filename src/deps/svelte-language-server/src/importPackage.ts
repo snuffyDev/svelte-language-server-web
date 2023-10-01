@@ -46,9 +46,7 @@ export function getPackageInfo(packageName: string, fromPath: string) {
         patch: Number(patch),
       },
     };
-  } catch (err) {
-    console.error(packageName, fromPath, err);
-  }
+  } catch (err) {}
 }
 
 export function importPrettier(fromPath: string): typeof prettier {
@@ -68,7 +66,6 @@ export function importSvelte(fromPath: string): typeof svelte {
 export function importSveltePreprocess(
   fromPath: string
 ): typeof sveltePreprocess {
-  console.log(fromPath);
   const pkg = getPackageInfo("svelte-preprocess", "/node_modules/");
   const main = resolve(pkg.path);
   Logger.debug("Using svelte-preprocess v" + pkg.version.full, "from", main);

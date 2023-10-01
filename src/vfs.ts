@@ -155,7 +155,6 @@ class VFSImpl extends EventEmitter.EventEmitter {
         VFS.normalize(dir).startsWith(VFS.normalize(path)) &&
         dir !== VFS.normalize(path)
     ) as string[];
-    console.log({ directories: [...directories.keys()], dirs });
     return dirs;
   }
 
@@ -406,5 +405,3 @@ function getBaseSvelteConfig(): string {
 		}
 	`;
 }
-
-console.log({ sys, VFS }, sys);

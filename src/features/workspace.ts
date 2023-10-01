@@ -43,7 +43,6 @@ export const handleFSSync = (
   const cb = batchUpdates<File>((...data) => {
     for (const file of data[0]) {
       for (const [name, contents] of file) {
-        // console.log({ file, name, contents, data });
         VFS.writeFile(name, contents);
         callback(VFS.normalize(name), contents);
       }
