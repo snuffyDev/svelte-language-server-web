@@ -22,18 +22,8 @@
     "package.json"
   ],
   "devDependencies": {
-    "@codemirror/lang-html": "^6.4.5",
-    "@codemirror/lang-javascript": "^6.1.9",
-    "@codemirror/language": "^6.8.0",
-    "@codemirror/lint": "^6.3.0",
-    "@codemirror/state": "^6.2.1",
-    "@codemirror/theme-one-dark": "^6.1.2",
-    "@codemirror/view": "^6.14.0",
-    "@ddietr/codemirror-themes": "^1.4.1",
     "@jridgewell/trace-mapping": "^0.3.17",
     "@open-rpc/client-js": "^1.8.1",
-    "@replit/codemirror-lang-svelte": "^6.0.0",
-    "@replit/codemirror-vscode-keymap": "^6.0.2",
     "@subframe7536/vite-plugin-ngmi-polyfill": "^0.1.0",
     "@sveltejs/vite-plugin-svelte": "^2.4.5",
     "@swc/cli": "^0.1.62",
@@ -44,8 +34,6 @@
     "@typescript/vfs": "^1.4.0",
     "@vscode/emmet-helper": "2.8.4",
     "chokidar": "^3.4.1",
-    "codemirror": "^6.0.1",
-    "codemirror-languageserver": "^1.11.0",
     "dts-buddy": "^0.1.8",
     "dts-bundle-generator": "^8.0.1",
     "esbuild": "^0.18.15",
@@ -133,5 +121,9 @@
       "types": "./dist/tsWorker.d.ts"
     },
     "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@types/events": "^3.0.1",
+    "codemirror-languageserver": "^1.11.0"
   }
 }

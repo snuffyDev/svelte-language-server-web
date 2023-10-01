@@ -116,7 +116,7 @@ class VFSImpl extends EventEmitter.EventEmitter {
   public readonly output: string[] = [];
 
   public getCurrentDirectory = () => {
-    return process.cwd();
+    return "/";
   };
   public getExecutingFilePath = () => {
     return "/";
@@ -127,13 +127,13 @@ class VFSImpl extends EventEmitter.EventEmitter {
   // VFS Methods
   public createDirectory(path: string) {
     this.emit("change", "change", _path.posix.dirname(this.normalize(path)));
+
     const parts = path.split("/");
     let curPath = "/";
     for (const dir of parts) {
       curPath = _path.posix.join(curPath, dir);
       directories.add(_path.posix.join(curPath));
     }
-    sys.set(this.normalize(path), { content: "", type: FileType.Directory });
     return directories.add(this.normalize(path));
   }
 
@@ -258,6 +258,7 @@ class VFSImpl extends EventEmitter.EventEmitter {
       throw new Error(`Target ${normalizedTarget} does not exist`);
     }
 
+    // @ts-expect-error it's fine
     sys.set(normalizedPath, normalizedTarget);
     this.symlinkMap.set(normalizedPath, normalizedTarget);
   }
@@ -401,7 +402,7 @@ function getBaseSvelteConfig(): string {
 	export default {
 		// Consult https://svelte.dev/docs#compile-time-svelte-preprocess
 		// for more information about preprocessors
-		preprocess: preprocess(),
+		preprocess: preprocess({ typescript: true }),
 		}
 	`;
 }

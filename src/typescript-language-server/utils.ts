@@ -15,7 +15,7 @@ export function debounceSameArg<T>(
   let timeout: any;
   let prevArg: T | undefined;
 
-  return (arg: T) => {
+  return async (arg: T) => {
     if (shouldCancelPrevious(arg, prevArg)) {
       clearTimeout(timeout);
     }

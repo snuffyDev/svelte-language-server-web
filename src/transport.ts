@@ -2,10 +2,7 @@
 export * from "@open-rpc/client-js/src/RequestManager";
 import { Transport } from "@open-rpc/client-js/src/transports/Transport.js";
 
-import {
-  getNotifications,
-  IJSONRPCNotification,
-} from "@open-rpc/client-js/src/Request.js";
+import { getNotifications } from "@open-rpc/client-js/src/Request.js";
 import type {
   JSONRPCRequestData,
   IJSONRPCData,
@@ -29,7 +26,7 @@ export default class PostMessageWorkerTransport extends Transport {
 
   public connect(): Promise<void> {
     return new Promise(async (resolve, reject) => {
-      this.worker.addEventListener("message", this.messageHandler);
+      this.worker!.addEventListener("message", this.messageHandler);
       resolve();
     });
   }
@@ -49,6 +46,6 @@ export default class PostMessageWorkerTransport extends Transport {
   }
 
   public close(): void {
-    this.worker.terminate();
+    this.worker?.terminate();
   }
 }

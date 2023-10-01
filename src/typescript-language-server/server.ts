@@ -17,6 +17,7 @@
 
 import ts from "typescript";
 import {
+  CancellationToken,
   CompletionItemKind,
   CompletionList,
   DiagnosticSeverity,
@@ -54,6 +55,7 @@ import { FileType } from "vscode-html-languageservice";
 import { URI } from "vscode-uri";
 import { getSemanticTokenLegends } from "./lib/semanticTokenLegend";
 import { debounceSameArg, debounceThrottle } from "./utils";
+import EventEmitter from "events/";
 
 export function scriptElementKindToCompletionItemKind(
   kind: ts.ScriptElementKind
@@ -162,57 +164,6 @@ class Document extends WritableDocument {
 
 let currentDir = "/";
 
-const matchFiles: (
-  path: string,
-  extensions: readonly string[] | undefined,
-  excludes: readonly string[] | undefined,
-  includes: readonly string[] | undefined,
-  useCaseSensitiveFileNames: boolean,
-  currentDirectory: string,
-  depth: number | undefined,
-  getFileSystemEntries: (path: string) => {
-    files: readonly string[];
-    directories: readonly string[];
-  },
-  realpath: (path: string) => string
-) => string[] = (ts as any).matchFiles;
-
-// from: https://github.com/microsoft/vscode/blob/main/extensions/typescript-language-features/web/webServer.ts#L491
-function getAccessibleFileSystemEntries(path: string): {
-  files: readonly string[];
-  directories: readonly string[];
-} {
-  const uri = path;
-  let entries: [string, FileType][] = [];
-  const files: string[] = [];
-  const directories: string[] = [];
-  try {
-    entries = VFS.readDirectoryRaw(uri);
-  } catch (_e) {
-    try {
-      entries = VFS.readDirectoryRaw(
-        URI.file(join(uri, "node-modules")).toString()
-      );
-    } catch (_e) {}
-  }
-  for (const [entry, type] of entries) {
-    // This is necessary because on some file system node fails to exclude
-    // '.' and '..'. See https://github.com/nodejs/node/issues/4002
-    if (entry === "." || entry === "..") {
-      continue;
-    }
-
-    if (type === FileType.File) {
-      files.push(entry);
-    } else if (type === FileType.Directory) {
-      directories.push(entry);
-    }
-  }
-  files.sort();
-  directories.sort();
-  return { files, directories };
-}
-
 const sendFileSync = debounce<(filename: string, content: string) => void>(
   (filename, content) => {
     syncFiles(filename, content);
@@ -288,8 +239,150 @@ class CompletionCache extends Cache<CompletionList> {
 
 const completionCache = new CompletionCache();
 
+class DiagnosticsManager {
+  public constructor(
+    private sendDiagnostics: (params: {
+      uri: string;
+      diagnostics: Diagnostic[];
+    }) => void,
+    private docManager: DocumentManager,
+    private getDiagnostics: (doc: Document) => Diagnostic[]
+  ) {}
+
+  private pendingUpdates = new Set<Document>();
+
+  private updateAll() {
+    this.docManager.getDocuments().forEach((doc) => {
+      this.update(doc);
+    });
+    this.pendingUpdates.clear();
+  }
+
+  scheduleUpdateAll = debounceThrottle(() => this.updateAll(), 1000);
+
+  private async update(document: Document) {
+    const diagnostics = await this.getDiagnostics(document);
+    this.sendDiagnostics({
+      uri: document.uri,
+      diagnostics,
+    });
+  }
+
+  removeDiagnostics(document: Document) {
+    this.pendingUpdates.delete(document);
+    this.sendDiagnostics({
+      uri: document.uri,
+      diagnostics: [] as Diagnostic[],
+    });
+  }
+
+  scheduleUpdate(document: Document) {
+    if (!this.docManager.getDocument(document.getURL())) {
+      return;
+    }
+
+    this.pendingUpdates.add(document);
+    this.scheduleBatchUpdate();
+  }
+
+  private scheduleBatchUpdate = debounceThrottle(() => {
+    this.pendingUpdates.forEach((doc) => {
+      this.update(doc);
+    });
+  }, 1000);
+}
+
+const docManagerEvents = [
+  "documentChange",
+  "documentClose",
+  "documentOpen",
+] as const;
+type DocumentManagerEvents = (typeof docManagerEvents)[number];
+
+class DocumentManager {
+  private emitter = new EventEmitter.EventEmitter();
+  private readonly documents = new Map<string, Document>();
+  private cancellableEmit = debounceSameArg(
+    (document: Document) => {
+      this.emitter.emit("documentChange", document);
+    },
+    (a, b) => a?.uri === b?.uri,
+    1000
+  );
+
+  public getDocument(uri: string): Document | undefined {
+    return this.documents.get(uri);
+  }
+
+  public getDocuments(): Document[] {
+    return Array.from(this.documents.values());
+  }
+
+  public openDocument(
+    uri: string,
+    languageId: string,
+    version: number,
+    content: string
+  ): Document {
+    const document = new Document(uri, languageId, version, content);
+    this.documents.set(uri, document);
+    this.emitter.emit("documentOpen", document);
+    return document;
+  }
+
+  public scheduleUpdate(document: Document) {
+    this.cancellableEmit(document);
+  }
+
+  public closeDocument(uri: string): void {
+    const document = this.documents.get(uri);
+    if (document) {
+      this.documents.delete(uri);
+      this.emitter.emit("documentClose", document);
+    }
+  }
+
+  public on(
+    event: DocumentManagerEvents,
+    listener: (document: Document) => void
+  ) {
+    return this.emitter.on(event, listener);
+  }
+
+  public off(
+    event: DocumentManagerEvents,
+    listener: (document: Document) => void
+  ) {
+    return this.emitter.off(event, listener);
+  }
+}
+
 export const createServer = ({ connection }: { connection: Connection }) => {
   const docs: Record<string, WritableDocument> = {};
+
+  const docManager = new DocumentManager();
+  const diagnosticsManager = new DiagnosticsManager(
+    (params) => {
+      connection.sendDiagnostics(params);
+    },
+    docManager,
+    (doc) => {
+      return lintSystem(doc);
+    }
+  );
+
+  docManager.on(
+    "documentChange",
+    diagnosticsManager.scheduleUpdate.bind(diagnosticsManager)
+  );
+  docManager.on(
+    "documentClose",
+    diagnosticsManager.removeDiagnostics.bind(diagnosticsManager)
+  );
+  docManager.on(
+    "documentOpen",
+    diagnosticsManager.scheduleUpdate.bind(diagnosticsManager)
+  );
 
   const createLanguageService = () => {
     var fileVersions = new Map();
@@ -351,7 +444,7 @@ export const createServer = ({ connection }: { connection: Connection }) => {
       getScriptFileNames() {
         return Array.from(readdirSync("/")).filter(
           (key) =>
-            !key.includes("/node_modules/") &&
+            !key.includes("/node_modules") &&
             (key.endsWith(".ts") ||
               key.endsWith(".tsx") ||
               key.endsWith(".js") ||
@@ -365,6 +458,7 @@ export const createServer = ({ connection }: { connection: Connection }) => {
       writeFile: (filename, content) => {
         ts.sys.writeFile(filename, content, false);
         VFS.writeFile(filename, content);
+        compilerHost.writeFile(filename, content, false);
       },
       realpath: realpathSync,
       getScriptVersion: function getScriptVersion(fileName) {
@@ -385,13 +479,7 @@ export const createServer = ({ connection }: { connection: Connection }) => {
         includes?: readonly string[],
         depth?: number
       ): string[] {
-        return compilerHost.readDirectory(
-          path,
-          extensions,
-          excludes,
-          includes,
-          depth
-        );
+        return VFS.readDirectory(path, extensions, excludes, includes, depth);
       },
       getDirectories: (...args) => {
         return VFS.getDirectories(...args).filter(
@@ -467,14 +555,13 @@ export const createServer = ({ connection }: { connection: Connection }) => {
       capabilities: {
         textDocumentSync: {
           openClose: true,
-          change: TextDocumentSyncKind.Incremental,
+          change: TextDocumentSyncKind.Full,
           save: {
             includeText: false,
           },
         },
         completionProvider: {
           completionItem: { labelDetailsSupport: true },
-          workDoneProgress: true,
           triggerCharacters: [
             ".",
             '"',
@@ -519,44 +606,55 @@ export const createServer = ({ connection }: { connection: Connection }) => {
       },
     };
   });
-
-  // await createTsSystem({}, "", new Map<string, string>([]));
   function updateFile(filePath: string, content: string) {
     env.updateFile(filePath, content);
   }
 
-  function autocompleteAtPosition(
+  async function autocompleteAtPosition(
     pos: number,
     filePath: string,
-    params: CompletionParams
-  ): CompletionList {
-    const result = env.getCompletionsAtPosition(filePath, pos, {
-      includeCompletionsForImportStatements: true,
-      includeCompletionsForModuleExports: true,
-      triggerKind: params.context.triggerKind,
-      includeCompletionsWithInsertText: true,
-      triggerCharacter: params.context.triggerCharacter as ts.CompletionsTriggerCharacter,
-      useLabelDetailsInCompletionEntries: true,
-      allowIncompleteCompletions: false,
-      includeAutomaticOptionalChainCompletions: true,
-      includeCompletionsWithSnippetText: true,
-      includeCompletionsWithClassMemberSnippets: true,
-      includeCompletionsWithObjectLiteralMethodSnippets: true,
-    });
-    const list = {
-      items: result.entries
-        .filter((v) => v !== null && v !== undefined)
-        .map((entry) => {
-          return {
-            ...entry,
-            label: entry.name,
-            kind: scriptElementKindToCompletionItemKind(entry.kind),
-          };
-        }),
-      isIncomplete: result.isIncomplete,
-    };
+    params: CompletionParams,
+    cancellationToken: CancellationToken
+  ): Promise<CompletionList> {
+    try {
+      cancellationToken.onCancellationRequested(() => {
+        throw null;
+      });
 
-    return list;
+      const result = env.getCompletionsAtPosition(filePath, pos, {
+        includeCompletionsForImportStatements: true,
+        includeCompletionsForModuleExports: true,
+        triggerKind: params.context.triggerKind,
+        includeCompletionsWithInsertText: true,
+        useLabelDetailsInCompletionEntries: true,
+        allowIncompleteCompletions: false,
+        includeAutomaticOptionalChainCompletions: true,
+        includeCompletionsWithSnippetText: true,
+        includeCompletionsWithClassMemberSnippets: true,
+        includeCompletionsWithObjectLiteralMethodSnippets: true,
+      });
+      if (!result || cancellationToken.isCancellationRequested) {
+        return null;
+      }
+
+      const list = {
+        items: result.entries
+          .filter((v) => v !== null && v !== undefined)
+          .map((entry) => {
+            if (cancellationToken.isCancellationRequested) throw null;
+            return {
+              ...entry,
+              label: entry.name,
+              kind: scriptElementKindToCompletionItemKind(entry.kind),
+            };
+          }),
+        isIncomplete: result.isIncomplete,
+      };
+
+      return list;
+    } catch (error) {
+      return null;
+    }
   }
 
   function infoAtPosition(pos: number, filePath: string) {
@@ -565,86 +663,76 @@ export const createServer = ({ connection }: { connection: Connection }) => {
     return result;
   }
 
-  const lintSystem = (() => {
-    const _lint = debounceThrottle<string>((filePath) => {
-      if (!env) return;
+  const lintSystem = (doc: Document) => {
+    if (!env) return;
 
-      const SyntacticDiagnostics = env.getSyntacticDiagnostics(filePath);
-      const SemanticDiagnostic = env.getSemanticDiagnostics(filePath);
-      const SuggestionDiagnostics = env.getSuggestionDiagnostics(filePath);
+    const filePath = doc.getFilePath();
+    const SyntacticDiagnostics = env.getSyntacticDiagnostics(filePath);
+    const SemanticDiagnostic = env.getSemanticDiagnostics(filePath);
+    const SuggestionDiagnostics = env.getSuggestionDiagnostics(filePath);
 
-      type ErrorMessageObj = {
-        messageText: string;
-        next?: ErrorMessageObj[];
+    type ErrorMessageObj = {
+      messageText: string;
+      next?: ErrorMessageObj[];
+    };
+    type ErrorMessage = ErrorMessageObj | string;
+
+    const messagesErrors = (message: ErrorMessage): string[] => {
+      if (typeof message === "string") return [message];
+
+      const messageList: string[] = [];
+      const getMessage = (loop: ErrorMessageObj) => {
+        messageList.push(loop.messageText);
+
+        if (loop.next) {
+          loop.next.forEach((item) => {
+            getMessage(item);
+          });
+        }
       };
-      type ErrorMessage = ErrorMessageObj | string;
 
-      const messagesErrors = (message: ErrorMessage): string[] => {
-        if (typeof message === "string") return [message];
+      getMessage(message);
 
-        const messageList: string[] = [];
-        const getMessage = (loop: ErrorMessageObj) => {
-          messageList.push(loop.messageText);
+      return messageList;
+    };
+    const diagnostics: Diagnostic[] = ([] as ts.DiagnosticWithLocation[])
+      .concat(SyntacticDiagnostics, SemanticDiagnostic, SuggestionDiagnostics)
+      .reduce((acc, result) => {
+        const severity: Diagnostic["severity"][] = [
+          DiagnosticSeverity.Warning,
+          DiagnosticSeverity.Error,
+          DiagnosticSeverity.Information,
+          DiagnosticSeverity.Hint,
+        ];
 
-          if (loop.next) {
-            loop.next.forEach((item) => {
-              getMessage(item);
-            });
-          }
-        };
+        const messages = messagesErrors(result.messageText);
+        for (const message of messages) {
+          acc.push({
+            range: _textSpanToRange(doc, result),
+            message,
+            source: result?.source || "ts",
+            severity: severity[result.category],
+          });
+        }
 
-        getMessage(message);
+        return acc;
+      }, [] as Diagnostic[]);
 
-        return messageList;
-      };
-      const diagnostics: Diagnostic[] = ([] as ts.DiagnosticWithLocation[])
-        .concat(SyntacticDiagnostics, SemanticDiagnostic, SuggestionDiagnostics)
-        .reduce((acc, result) => {
-          const severity: Diagnostic["severity"][] = [
-            DiagnosticSeverity.Warning,
-            DiagnosticSeverity.Error,
-            DiagnosticSeverity.Information,
-            DiagnosticSeverity.Hint,
-          ];
-
-          const messages = messagesErrors(result.messageText);
-          for (const message of messages) {
-            acc.push({
-              range: _textSpanToRange(docs[`${filePath}`], result),
-              message,
-              source: result?.source || "ts",
-              severity: severity[result.category],
-              // actions: codeActions as any as Diagnostic["actions"]
-            });
-          }
-
-          return acc;
-        }, [] as Diagnostic[]);
-
-      // return { items: diagnostics };
-      connection.sendDiagnostics({
-        uri: URI.file(filePath).toString(true),
-        diagnostics,
-      });
-    }, 1000);
-    return _lint;
-  })();
+    return diagnostics;
+  };
 
   connection.onDidOpenTextDocument((params) => {
     const filePath = normalizePath(params.textDocument.uri);
     const content = params.textDocument.text;
+    docManager.openDocument(
+      params.textDocument.uri,
+      params.textDocument.languageId,
+      params.textDocument.version,
+      content
+    );
 
-    if (!docs[filePath]) {
-      docs[filePath] = new Document(
-        params.textDocument.uri,
-        params.textDocument.languageId,
-        params.textDocument.version,
-        content
-      );
-    }
     currentDir = dirname(filePath);
     updateFile(filePath, content);
-    lintSystem(filePath);
   });
 
   connection.onDidChangeTextDocument(
@@ -652,35 +740,35 @@ export const createServer = ({ connection }: { connection: Connection }) => {
       (params) => {
         const filePath = normalizePath(params.textDocument.uri);
         const content = params.contentChanges[0].text;
-        docs[filePath].update(content, 0, content.length);
-        docs[filePath].version++;
+        const doc = docManager.getDocument(params.textDocument.uri);
+
+        doc.update(content, 0, content.length);
 
         if (currentDir !== dirname(filePath)) {
           currentDir = dirname(filePath);
         }
         updateFile(filePath, content);
-        lintSystem(filePath);
       },
       (a, b) => a?.textDocument?.uri === b?.textDocument?.uri,
-      1000
+      500
     )
   );
 
-  connection.onCompletion((params) => {
+  connection.onCompletion(async (params, cancellationToken) => {
     const filePath = normalizePath(params.textDocument.uri);
-
+    const doc = docManager.getDocument(params.textDocument.uri);
     return autocompleteAtPosition(
-      docs[filePath].offsetAt(params.position),
+      doc.offsetAt(params.position),
       filePath,
-      params
+      params,
+      cancellationToken
     );
   });
 
   const onHover = debounce<(params: HoverParams) => Hover>((params) => {
     const { textDocument, position } = params;
     const filePath = normalizePath(textDocument.uri);
-
-    const sourceDoc = docs[filePath];
+    const sourceDoc = docManager.getDocument(textDocument.uri);
 
     const info = infoAtPosition(sourceDoc.offsetAt(position), filePath);
 
@@ -694,7 +782,7 @@ export const createServer = ({ connection }: { connection: Connection }) => {
       : "";
     const contents = displayPartsToString(info.displayParts);
     return transformHoverResultToHtml({
-      range: _textSpanToRange(docs[filePath], info.textSpan),
+      range: _textSpanToRange(sourceDoc, info.textSpan),
       contents: [
         {
           language: "typescript",
@@ -707,7 +795,7 @@ export const createServer = ({ connection }: { connection: Connection }) => {
         },
       ],
     });
-  }, 1000);
+  }, 100);
 
   connection.onHover(onHover);
 

@@ -1,35 +1,39 @@
 {
-	"compilerOptions": {
-		"target": "ESNext",
-		"useDefineForClassFields": false,
-		"module": "ESNext",
-		"lib": ["ES2020", "DOM", "WebWorker", "Webworker.Iterable", "DOM.Iterable"],
+  "compilerOptions": {
+    "target": "ESNext",
+    "useDefineForClassFields": false,
+    "module": "ESNext",
+    "lib": ["ES2020", "DOM", "WebWorker", "Webworker.Iterable", "DOM.Iterable"],
 
-		/* Bundler mode */
-		"importHelpers": true,
-		"moduleResolution": "Bundler",
-		"noEmitOnError": false,
-		"resolveJsonModule": true,
-		"strict": false,
-		"emitDeclarationOnly": true,
-		"noEmit": false,
-		"declarationMap": false,
-		"resolvePackageJsonExports": true,
-		"resolvePackageJsonImports": true,
-		"noResolve": false,
-		"rootDirs": ["src", "module_shims"],
-		"baseUrl": ".",
-		"declaration": true,
+    /* Bundler mode */
+    "importHelpers": true,
+    "moduleResolution": "Bundler",
+    "noEmitOnError": false,
+    "resolveJsonModule": true,
+    "strict": true,
+    "emitDeclarationOnly": true,
+    "noEmit": false,
+    "declarationMap": false,
+    "resolvePackageJsonExports": true,
+    "resolvePackageJsonImports": true,
 
-		"skipDefaultLibCheck": true,
-		"allowSyntheticDefaultImports": true,
-		/* Linting */
-		"sourceMap": false,
-		"noFallthroughCasesInSwitch": true
-	},
-	"exclude": [
-		"node_modules/@open-rpc/client-js/src/transports/Transport.ts",
-		"node_modules/**"
-	],
-	"include": ["src/index.ts", "src/worker.ts"]
+    "noResolve": false,
+    "rootDirs": ["src"],
+    "baseUrl": ".",
+    "declaration": true,
+
+    "skipDefaultLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "stripInternal": true,
+    /* Linting */
+    "sourceMap": false,
+    "noFallthroughCasesInSwitch": true
+  },
+  "exclude": [
+    "node_modules/@open-rpc/client-js/src/transports/Transport.ts",
+    "node_modules/**",
+    "module_shims/**",
+    "src/global_patches.ts"
+  ],
+  "include": ["src/index.ts", "src/worker.ts"]
 }

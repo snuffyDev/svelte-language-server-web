@@ -1,15 +1,14 @@
-// fs.ts - shims for SLS
+// @ts-nocheck
 import "./prelude";
 
 //@ts-ignore
-import _ts, { CompilerOptions } from "typescript";
+import _ts from "typescript";
 //@ts-ignore
 const ts = _ts.default;
 
 import preprocess from "svelte-preprocess/dist/autoProcess.js";
 import preprocessJSON from "svelte-preprocess/package.json";
 import * as transformerTS from "svelte-preprocess/dist/transformers/typescript.js";
-import * as ppts from "svelte-preprocess/dist/processors/typescript.js";
 import * as transformerPOSTCSS from "svelte-preprocess/dist/transformers/postcss.js";
 import * as transformerBabel from "svelte-preprocess/dist/transformers/babel.js";
 import * as transformerSCSS from "svelte-preprocess/dist/transformers/scss.js";
@@ -24,7 +23,6 @@ import { version as preprocess_version } from "svelte-preprocess/package.json";
 import * as svelte from "svelte/compiler";
 import { version as svelteVersion } from "svelte/package.json";
 import { prettier } from "./prettier";
-import { SvelteConfig } from "./deps/svelte-language-server/src/lib/documents/configLoader";
 
 const GLOBAL_FUNCTION = Function;
 if (!globalThis.typescript$1) {
@@ -71,17 +69,14 @@ const _Function = new Proxy(Function, {
       return (x) => {
         const processor = {};
         const reqPreProcess = globalThis.__importDefault(`svelte-preprocess`);
-        console.log({ reqPreProcess });
 
         for (const key in reqPreProcess.default) {
           processor[key] = `${reqPreProcess.default[key].toString()}`;
         }
-        console.log({ processor });
         // convert processor to a base64 string, while keeping the functions intact
         const processorString = `export default () => (${JSON.stringify(
           processor
         )})`;
-        console.log({ processorString });
 
         // convert the data url into a object url
         const processorObjectUrl = URL.createObjectURL(
@@ -106,16 +101,6 @@ const _Function = new Proxy(Function, {
     return new GLOBAL_FUNCTION(...arguments);
   },
 });
-
-const compilerOptions: CompilerOptions = {
-  ...ts.getDefaultCompilerOptions(),
-  allowNonTsExtensions: true,
-  allowJs: true,
-  checkJs: true,
-  moduleResolution: ts.ModuleResolutionKind.NodeJs,
-  module: ts.ModuleKind.ESNext,
-  target: ts.ScriptTarget.ESNext,
-};
 
 globalThis.__importStar = (req) => {
   return req;
@@ -159,22 +144,6 @@ const required = {
   "/prettier": prettier,
   "/prettier/": prettier,
 };
-
-// const conf: SvelteConfig = {
-//   preprocess: [
-//     ppts({
-//       compilerOptions,
-//       tsconfigDirectory: "/",
-//       tsconfigFile: "/tsconfig.json",
-//     }),
-//   ], // ppts.default({
-//   // 	tsconfigFile: "/tsconfig.json",
-//   // 	tsconfigDirectory: "/",
-//   // 	compilerOptions,
-//   // }),
-//   // ],
-// };
-// setConfigLoader("getConfig", conf);
 
 globalThis.__importDefault = function (req) {
   return { default: require(req) };

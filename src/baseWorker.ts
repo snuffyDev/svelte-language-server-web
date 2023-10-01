@@ -1,51 +1,29 @@
-import "./prelude";
+import { Connection } from "vscode-languageserver/browser";
 import "./global_patches";
+import "./prelude";
+import { JsonValue, PackageJson } from "type-fest";
+import { fetchTypeDefinitionsFromCDN } from "./features/autoTypings";
+import { syncFiles } from "./features/workspace";
 import {
-  BrowserMessageReader,
-  BrowserMessageWriter,
-  Connection,
-  createConnection,
-} from "vscode-languageserver/browser";
-
-import { VFS } from "./vfs";
-import {
+  DeleteFileMessage,
   workerRPCMethods,
   type AddFilesMessage,
   type FetchTypesMessage,
   type SetupMessage,
-  type WorkerRPCMethod,
   type WorkerResponse,
-  DeleteFileMessage,
 } from "./messages";
-import {
-  PromisePool,
-  fetchTypeDefinitionsFromCDN,
-} from "./features/autoTypings";
-import { deepMerge } from "./worker.utils";
-import { handleFSSync, syncFiles } from "./features/workspace";
-import { JsonValue, PackageJson } from "type-fest";
-import ts from "typescript";
-import path from "path";
+import { VFS } from "./vfs";
 
 addEventListener("messageerror", (e) => console.error(e));
 addEventListener("error", (e) => console.error(e));
 
-const pool = new PromisePool(10);
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
-
-const originalCreateDirectory = VFS.createDirectory.bind(VFS);
-
-VFS.createDirectory = (dirPath: string) => {
-  ts.sys.createDirectory(path.posix.dirname(VFS.normalize(dirPath)));
-  return originalCreateDirectory(dirPath);
-};
 
 export const BaseWorker = (
   createServer: ({ connection }: { connection: Connection }) => void,
   connection: Connection,
   name: string
 ) => {
-  const tsConfig = {};
   const setupQueue = [];
 
   const isRPCMessage = (
@@ -68,32 +46,31 @@ export const BaseWorker = (
       let ambientTypes = "";
       try {
         const json = data.params as PackageJson;
-        console.log({ json });
-        const devDepKeys = Object.keys(json.devDependencies || {});
 
         const nodeModules = VFS.readDirectory("/node_modules").map((d) =>
           d.replace("/node_modules/", "")
         );
 
-        const node_key_length = "/node_modules/".length;
+        // Get each `*Dependencies` key from the package.json
         const dependencies = Object.keys(json)
           .filter((key) => key.toLowerCase().includes("dependencies"))
           .map((key) => ({ [key]: json[key] }));
 
-        const filteredDeps: JsonValue = {};
+          const packagesToInstall: JsonValue = {};
+          
+        // Filter out the node_modules that already exist
         for (const dependencyObject of dependencies) {
           const o = Object.keys(dependencyObject as Record<string, string>);
-          console.log({ o });
           for (const key of o) {
             if (!nodeModules.some((d) => d.startsWith(key))) {
-              filteredDeps[key] = dependencyObject[key];
+              packagesToInstall[key] = dependencyObject[key];
             }
           }
         }
-        console.log({ filteredDeps });
-        const filteredKeys = Object.keys(filteredDeps);
-        const hasSvelteKit = filteredKeys.includes("@sveltejs/kit");
-        const hasVite = filteredKeys.includes("vite");
+
+        const packageKeys = Object.keys(packagesToInstall);
+        const hasSvelteKit = packageKeys.includes("@sveltejs/kit");
+        const hasVite = packageKeys.includes("vite");
 
         if (hasSvelteKit) {
           ambientTypes += `import "@sveltejs/kit/types"\n`;
@@ -103,9 +80,8 @@ export const BaseWorker = (
           ambientTypes += `import "vite/client"\n`;
         }
 
-        return fetchTypeDefinitionsFromCDN(filteredDeps).then((types) => {
+        return fetchTypeDefinitionsFromCDN(packagesToInstall).then((types) => {
           for (const [key, value] of types) {
-            console.log({ key, value });
             const path = `/node_modules/${key}`;
 
             VFS.writeFile(path, value);
@@ -113,7 +89,9 @@ export const BaseWorker = (
         });
       } catch {
       } finally {
-        VFS.writeFile(`/@@${Date.now()}+slsw--ambient.d.ts`, ambientTypes);
+        const ambientTypesPath = `/node_modules/@types/@@${Date.now()}+slsw--ambient.d.ts`;
+        VFS.writeFile(ambientTypesPath, ambientTypes);
+        syncFiles(ambientTypesPath, ambientTypes)
       }
     };
     addEventListener("setup-completed", (event) => {

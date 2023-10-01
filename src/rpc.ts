@@ -1,20 +1,31 @@
+import type { Transport } from "@open-rpc/client-js/build/transports/Transport";
 import { JSONRPCError } from "@open-rpc/client-js/src/Error";
 import {
-  JSONRPCRequestData,
+  IJSONRPCNotification,
   IJSONRPCNotificationResponse,
   IJSONRPCResponse,
-  IJSONRPCNotification,
+  JSONRPCRequestData,
 } from "@open-rpc/client-js/src/Request";
-import PostMessageWorkerTransport from "./transport";
-import { WorkerMessage, WorkerRPCMethod, WorkerResponse } from "./messages";
 import { LanguageServerClient } from "codemirror-languageserver/";
-import type { Transport } from "@open-rpc/client-js/build/transports/Transport";
 import type { PackageJson } from "type-fest";
+import { WorkspaceFolder } from "vscode-languageserver-types";
+import { WorkerMessage, WorkerRPCMethod, WorkerResponse } from "./messages";
+import PostMessageWorkerTransport from "./transport";
 
-type LanguageServerClientOptions = Exclude<
-  ConstructorParameters<typeof LanguageServerClient>["0"],
-  "transport"
->;
+interface LanguageServerBaseOptions {
+  rootUri: string | null;
+  workspaceFolders: WorkspaceFolder[] | null;
+  documentUri: string;
+  languageId: string;
+}
+interface LanguageServerClientOptions extends LanguageServerBaseOptions {
+  transport: Transport | WorkerRPC;
+  autoClose?: boolean;
+}
+interface LanguageServerOptions extends LanguageServerClientOptions {
+  client?: LanguageServerClient;
+  allowHTMLContent?: boolean;
+}
 
 interface ITransportEvents {
   error: (data: JSONRPCError) => void;
@@ -56,18 +67,15 @@ type Files = Record<FileName, FileContents>;
 export class WorkerRPC extends PostMessageWorkerTransport {
   private internalMessageId = 0;
   private rpcQueue: Map<number, (value: boolean) => void> = new Map();
-  private langClient: LanguageServerClient;
-  private worker: Worker;
+  private langClient!: LanguageServerClient;
+  private worker!: Worker;
 
   /**
    * Creates the language Worker from the provided URL.
    * @param worker The URL to the worker file.
    * @param options The options to pass to the Language Client.
    */
-  constructor(
-    worker: URL,
-    options: Omit<LanguageServerClientOptions, "transport">
-  );
+  constructor(worker: URL, options: Omit<LanguageServerOptions, "transport">);
   /**
    *  Uses a pre-existing instance of the Worker
    * @param worker The instantiated Worker.
@@ -76,7 +84,7 @@ export class WorkerRPC extends PostMessageWorkerTransport {
    */
   constructor(
     worker: Worker,
-    options: Omit<LanguageServerClientOptions, "transport">
+    options: Omit<LanguageServerOptions, "transport">
   );
   /**
    *  Creates the language Worker from the provided string.
@@ -86,17 +94,15 @@ export class WorkerRPC extends PostMessageWorkerTransport {
    */
   constructor(
     worker: string,
-    options: Omit<LanguageServerClientOptions, "transport"> & {
+    options: Omit<LanguageServerOptions, "transport"> & {
       transport: WorkerRPC;
     }
   );
   constructor(
-    worker: string,
-    options: Omit<LanguageServerClientOptions, "transport">
-  );
-  constructor(
-    worker: unknown,
-    private options: Omit<LanguageServerClientOptions, "transport">
+    worker: string | Worker | URL,
+    private options:
+      | LanguageServerOptions
+      | Omit<LanguageServerOptions, "transport">
   ) {
     let _worker: Worker;
 
@@ -133,29 +139,25 @@ export class WorkerRPC extends PostMessageWorkerTransport {
     };
   }
 
-  public client = () => {
-    if (!this.langClient) {
-      this.langClient = new LanguageServerClient({
-        transport: this as unknown as Transport,
-        ...this.options,
-      });
-    }
+  public client =
+    (): import("codemirror-languageserver").LanguageServerClient => {
+      if (!this.langClient) {
+        this.langClient = new LanguageServerClient({
+          // @ts-expect-error it's fine
+          transport: this as unknown as Transport,
+          ...this.options,
+        });
+      }
 
-    return this.langClient;
-  };
+      return this.langClient;
+    };
 
   dispose() {
     this.worker.removeEventListener("message", this.onMessage);
     this.worker.terminate();
 
     this.rpcQueue.clear();
-    this.rpcQueue = null;
-    this.worker = null;
     this.langClient.close();
-    this.langClient = null;
-
-    this.internalMessageId = null;
-    this.options = null;
   }
 
   sendNotification(method: string, params: object | any[]) {

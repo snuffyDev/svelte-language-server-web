@@ -291,9 +291,9 @@ export default defineConfig({
 		js: `const __filename = new URL(import.meta.url).pathname; `,
 	},
 	platform: "browser",
-	external: ["@codemirror/state"],
 	outDir: OUT_DIR,
-	noExternal: [/.*/],
+	noExternal: [/^(?!@codemirror\/state)([-\/a-z0-9\@\.\/]*.+)$/],
+	external: ["@codemirror/state"],
 	format: "esm",
 	define: {
 		global: "globalThis",
