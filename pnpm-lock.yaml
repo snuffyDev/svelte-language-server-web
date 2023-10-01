@@ -13,6 +13,9 @@ dependencies:
     version: 2.0.2
 
 devDependencies:
+  '@codemirror/state':
+    specifier: ^6.2.1
+    version: 6.2.1
   '@jridgewell/trace-mapping':
     specifier: ^0.3.17
     version: 0.3.19
@@ -223,7 +226,6 @@ packages:
 
   /@codemirror/state@6.2.1:
     resolution: {integrity: sha512-RupHSZ8+OjNT38zU9fKH2sv+Dnlr8Eb8sl4NOnnqz95mCFTZUaiRP8Xv5MeeaG0px2b8Bnfe7YGwCV3nsBhbuw==}
-    dev: false
 
   /@codemirror/view@6.21.0:
     resolution: {integrity: sha512-JI3asAk/fZ7h2ATjY9ErDFGWoWe4Bu7XgzR31G26RU3M/DLjfdQK8Im7hL1P/PAyprfVrf0uRNqxu02TkBcm3g==}

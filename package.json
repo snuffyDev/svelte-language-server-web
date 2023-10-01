@@ -1,6 +1,6 @@
 {
   "name": "svelte-language-server-web",
-  "version": "0.0.11",
+  "version": "0.0.2",
   "type": "module",
   "main": "dist/index.js",
   "module": "dist/index.js",
@@ -15,7 +15,6 @@
     "build:dev": "NODE_ENV=development node --max_old_space_size=16384 ./node_modules/tsup/dist/cli-node.js",
     "build:testing": "NODE_ENV=testing node  esbuild.js",
     "build:ls": "",
-    "build:frontend": "node --max_old_space_size=16384 ./node_modules/vite/bin/vite.js build",
     "preview": "vite preview"
   },
   "files": [
@@ -23,6 +22,7 @@
     "package.json"
   ],
   "devDependencies": {
+    "@codemirror/state": "^6.2.1",
     "@jridgewell/trace-mapping": "^0.3.17",
     "@open-rpc/client-js": "^1.8.1",
     "@sveltejs/vite-plugin-svelte": "^2.4.5",
@@ -87,6 +87,19 @@
     }
   },
   "imports": {},
+  "typesVersions": {
+    "*": {
+      "svelteWorker": [
+        "dist/worker.d.ts"
+      ],
+      "tsWorker": [
+        "dist/tsWorker.d.ts"
+      ],
+      "*": [
+        "dist/index.d.ts"
+      ]
+    }
+  },
   "exports": {
     ".": {
       "require": "./dist/index.js",

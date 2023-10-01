@@ -56,8 +56,8 @@ export const BaseWorker = (
           .filter((key) => key.toLowerCase().includes("dependencies"))
           .map((key) => ({ [key]: json[key] }));
 
-          const packagesToInstall: JsonValue = {};
-          
+        const packagesToInstall: JsonValue = {};
+
         // Filter out the node_modules that already exist
         for (const dependencyObject of dependencies) {
           const o = Object.keys(dependencyObject as Record<string, string>);
@@ -85,13 +85,14 @@ export const BaseWorker = (
             const path = `/node_modules/${key}`;
 
             VFS.writeFile(path, value);
+            syncFiles(path, value);
           }
         });
       } catch {
       } finally {
         const ambientTypesPath = `/node_modules/@types/@@${Date.now()}+slsw--ambient.d.ts`;
         VFS.writeFile(ambientTypesPath, ambientTypes);
-        syncFiles(ambientTypesPath, ambientTypes)
+        syncFiles(ambientTypesPath, ambientTypes);
       }
     };
     addEventListener("setup-completed", (event) => {
@@ -106,7 +107,7 @@ export const BaseWorker = (
       // Process our custom RPC messages
       if (isRPCMessage(event.data)) {
         if (event.data.method === "@@fetch-types") {
-          await handleFetchTypes(event.data).catch(console.error);
+          handleFetchTypes(event.data).catch(console.error);
           await tick();
           postMessage({
             method: "@@fetch-types",
@@ -126,7 +127,7 @@ export const BaseWorker = (
           } as WorkerResponse<"@@delete-file">);
           return;
         }
-        await updateVFS(event.data.params);
+        updateVFS(event.data.params);
         await tick();
         if (event.data.method === "@@setup") {
           console.log(`Setting up ${name} Language Server...`);
@@ -152,32 +153,11 @@ export const BaseWorker = (
     });
 
     async function updateVFS(params: Record<string, string>) {
-      let updateTsconfig = false;
       const fileNames = Object.keys(params).sort((a, b) => b.length - a.length);
       for (let i = 0; i < fileNames.length - 1; i++) {
         const fileName = fileNames[i];
         const fileContents = params[fileName];
-        if (
-          !fileName.includes("node_modules") &&
-          (fileName.includes("jsconfig.json") ||
-            fileName.includes("tsconfig.json"))
-        ) {
-          updateTsconfig = true;
-          // Object.assign(
-          //   tsConfig,
-          //   deepMerge(
-          //     tsConfig,
-          //     JSON.parse(
-          // fileContents.replace(
-          //   /\\"|"(?:\\"|[^"])*"|(\/\/.*|\/\*[\s\S]*?\*\/)/g,
-          //   (m, g) => (g ? "" : m)
-          // )
-          //     )
-          //   )
-          // );
-        }
-        const isTsOrJsConfig =
-          fileName === "/tsconfig.json" || fileName === "/jsconfig.json";
+
         VFS.writeFile(fileName, fileContents);
         syncFiles(VFS.normalize(fileName), fileContents);
       }

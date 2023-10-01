@@ -189,7 +189,7 @@ export class ConfigLoader {
 
   private async loadConfig(configPath: string, directory: string) {
     try {
-      const configFile = this.fs.readFileSync(configPath);
+      let configFile = this.fs.readFileSync(configPath) as string;
       let processor = "export default (() => {\n";
       const reqPreProcess = await import(`svelte-preprocess`);
       for (const key in reqPreProcess.default) {
@@ -204,9 +204,16 @@ export class ConfigLoader {
       }
 
       processor += "\n}});";
-      // convert processor to a base64 string, while keeping the functions intact
-
-      // convert the base64 string into a data url
+      if (/vitePreprocess\((\{(.|\n)*?})?\)/gm.test(configFile)) {
+        configFile = configFile.replace(
+          /vitePreprocess\((\{(.|\n)*?})?\)/gm,
+          "sveltePreprocess()"
+        );
+        configFile = configFile.replace(
+          /import.+\{.+vitePreprocess.+\}.+from ["']@sveltejs\/vite-plugin-svelte["']/gm,
+          'import sveltePreprocess from "svelte-preprocess"'
+        );
+      }
 
       // convert the data url into a object url
       const processorObjectUrl = globalThis.URL.createObjectURL(
