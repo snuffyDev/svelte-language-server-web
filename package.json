@@ -13,7 +13,6 @@
     "build:testing": "NODE_ENV=testing node  esbuild.js",
     "build:ls": "",
     "build:frontend": "node --max_old_space_size=16384 ./node_modules/vite/bin/vite.js build",
-    "prepublishOnly": "node scripts/generate-dts-bundle.js",
     "preview": "vite preview"
   },
   "files": [
