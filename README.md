@@ -54,11 +54,11 @@ Using the worker (CodeMirror 6):
 import { WorkerRPC } from "svelte-language-server-web";
 
 const files = {
-  '/package.json': '...' // package.json as a string,
-  '/tsconfig.json': '...' // tsconfig.json as a string,
-  '/src/App.svelte': '...' // Svelte Component as a string
+  "/package.json": "...", // package.json as a string
+  "/tsconfig.json": "...", // tsconfig.json as a string
+  "/src/App.svelte": "...", // Svelte Component as a string
   // .. rest of your files
-}
+};
 
 // setup the svelte worker
 const svelteWorker = new Worker(new URL("./worker.ts", import.meta.url), {
@@ -81,14 +81,13 @@ const tsLanguageServer = new WorkerRPC(tsWorker, {
   workspaceFolders: null,
 });
 
-
 await Promise.all([
   /**
    * fetch the type definitions for your dependencies
    * (can be called at any time to fetch type definitions for packages on-demand)
    */
-  svelteLanguageServer.fetchTypes(files['/package.json']),
-  tsLanguageServer.fetchTypes(files['/package.json']),
+  svelteLanguageServer.fetchTypes(files["/package.json"]),
+  tsLanguageServer.fetchTypes(files["/package.json"]),
 
   /**
    * add your project's files
@@ -100,24 +99,24 @@ await Promise.all([
   // setup and finish setup
   svelteLanguageServer.setup(files),
   tsLanguageServer.setup(files),
-])
+]);
 
 // create the EditorState per document
 const state = EditorState.create({
-      doc: files['/src/App.svelte'],
-      extensions: [
-        languageServerWithTransport({
-          transport: svelteLanguageServer,
-          documentUri: 'file:///src/App.svelte', // documentUri must start with `file:///`
-          languageId: "svelte",
-          workspaceFolders: null,
-          rootUri: "file:///",
-          allowHTMLContent: true,
-          autoClose: false,
-          client: svelteLanguageServer.client(),
-        }),
-      ],
-    });
+  doc: files["/src/App.svelte"],
+  extensions: [
+    languageServerWithTransport({
+      transport: svelteLanguageServer,
+      documentUri: "file:///src/App.svelte", // documentUri must start with `file:///`
+      languageId: "svelte",
+      workspaceFolders: null,
+      rootUri: "file:///",
+      allowHTMLContent: true,
+      autoClose: false,
+      client: svelteLanguageServer.client(),
+    }),
+  ],
+});
 
 // Create the editor with basic setup and Svelte + TypeScript language server integration
 const editor = new EditorView({
@@ -125,8 +124,6 @@ const editor = new EditorView({
   parent: document.getElementById("editor")!,
   extensions: [],
 });
-
-
 ```
 
 More complete examples of usage can be found in `/examples` within the repository.
