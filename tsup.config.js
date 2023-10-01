@@ -133,6 +133,28 @@ const moduleShimmer = {
 				};
 			},
 		);
+		build.onLoad(
+			{
+				filter: /\/svelte-preprocess\/dist\/index\.js/,
+			},
+			async () => {
+				const contents = await readFile(
+					path.resolve(
+						__dirname,
+						"node_modules/svelte-preprocess/dist/index.js",
+					),
+				).then((x) => x.toString());
+				// .replace("synchronizeHostData()", "if (false)");
+				return {
+					contents,
+					loader: "ts",
+					resolveDir: path.resolve(
+						__dirname,
+						"node_modules/svelte-preprocess/dist/",
+					),
+				};
+			},
+		);
 		build.onLoad({ filter: /.*/, namespace: moduleShimmerName }, (args) => {
 			const contents = moduleShims[args.path];
 
