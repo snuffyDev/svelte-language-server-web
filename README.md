@@ -129,3 +129,25 @@ const editor = new EditorView({
 ```
 
 More complete examples of usage can be found in `/examples` within the repository.
+
+## Supporting Svelte
+
+> (from: https://github.com/sveltejs/language-tools/blob/master/README.md)
+> Be sure to support their great work!
+
+Svelte is an MIT-licensed open source project with its ongoing development made possible entirely by the support of awesome volunteers. If you'd like to support their efforts, please consider:
+
+- [Becoming a backer on Open Collective](https://opencollective.com/svelte).
+
+Funds donated via Open Collective will be used for compensating expenses related to Svelte's development such as hosting costs. If sufficient donations are received, funds may also be used to support Svelte's development more directly.
+
+## License
+
+[MIT](LICENSE)
+
+## Credits
+
+- [The Svelte maintainers](https://github.com/sveltejs/) for their interest in this project, as well as their support
+- [sveltejs/language-tools](https://github.com/sveltejs/language-tools/) for the original code this repo is based on
+- [asafamr/monaco-svelte](https://github.com/asafamr/monaco-svelte/) for originally inspiring this repo
+- [asafamr/svelte-vscode-web](https://github.com/asafamr/svelte-vscode-web/) for originally inspiring this repo, and for originally doing the heavy lifting with the config, as well as certain patches
