@@ -1,40 +1,44 @@
 {
-	"compilerOptions": {
-		"target": "ESNext",
-		"useDefineForClassFields": false,
-		"module": "ESNext",
-		"lib": ["ES2021", "DOM", "WebWorker", "Webworker.Iterable", "DOM.Iterable"],
+  "compilerOptions": {
+    "target": "ESNext",
+    "useDefineForClassFields": false,
+    "module": "ESNext",
+    "lib": ["ES2021", "DOM", "WebWorker", "Webworker.Iterable", "DOM.Iterable"],
 
-		/* Bundler mode */
-		"importHelpers": true,
-		"moduleResolution": "Node",
-		"noEmitOnError": false,
-		"resolveJsonModule": true,
-		"strict": false,
-		"emitDeclarationOnly": true,
-		"inlineSources": false,
-		"noEmit": false,
-		"noResolve": false,
-		"declarationDir": "./dist",
-		"rootDirs": ["src", "src/deps", "src/deps/svelte-language-server"],
-		"types": [],
-		"baseUrl": ".",
-		"declaration": true,
-		"declarationMap": true,
-		"skipDefaultLibCheck": true,
-		"allowSyntheticDefaultImports": true,
-		/* Linting */
-		"sourceMap": false,
-		"noFallthroughCasesInSwitch": true,
-		"typeRoots": ["./node_modules/@types", "./src/@types"]
-	},
-	"exclude": ["node_modules/@open-rpc/client-js/src/transports/Transport.ts"],
-	"include": [
-		"src/index.ts",
-		"src/deps/svelte-language-server/src/index.",
-		"src/**/*.ts",
-		"src/worker.ts",
-		"src/@types/*.d.ts",
-		"vite-env.d.ts"
-	]
+    /* Bundler mode */
+    "importHelpers": true,
+    "moduleResolution": "Node",
+    "noEmitOnError": false,
+    "resolveJsonModule": true,
+    "strict": false,
+    "emitDeclarationOnly": true,
+    "inlineSources": false,
+    "noEmit": false,
+    "noResolve": false,
+    "declarationDir": "./dist",
+    "rootDirs": ["src", "src/deps", "src/deps/svelte-language-server"],
+    "types": [],
+    "baseUrl": ".",
+    "declaration": true,
+    "declarationMap": true,
+    "skipDefaultLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    /* Linting */
+    "sourceMap": false,
+    "noFallthroughCasesInSwitch": true,
+    "typeRoots": ["./node_modules/@types", "./src/@types"]
+  },
+  "exclude": [
+    "node_modules/@open-rpc/client-js/src/transports/Transport.ts",
+    "node_modules/**/**/*/*.ts"
+  ],
+  "include": [
+    "src/index.ts",
+    "src/deps/svelte-language-server/src/index.",
+
+    "src/**/*.ts",
+    "src/worker.ts",
+    "src/@types/*.d.ts",
+    "vite-env.d.ts"
+  ]
 }

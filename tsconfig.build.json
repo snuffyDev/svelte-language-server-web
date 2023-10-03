@@ -16,7 +16,7 @@
     "declarationMap": false,
     "resolvePackageJsonExports": true,
     "resolvePackageJsonImports": true,
-
+    "skipLibCheck": true,
     "noResolve": false,
     "rootDirs": ["src"],
     "baseUrl": ".",
@@ -30,7 +30,8 @@
     "noFallthroughCasesInSwitch": true
   },
   "exclude": [
-    "node_modules/@open-rpc/client-js/src/transports/Transport.ts",
+    "node_modules/**/**/*/*.ts",
+    "node_modules/**/@open-rpc/client-js/src/transports/Transport.ts",
     "node_modules/**",
     "module_shims/**",
     "src/global_patches.ts"
