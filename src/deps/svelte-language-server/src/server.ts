@@ -123,7 +123,7 @@ export function startServer(options?: LSOptions) {
 
   handleFSSync((filename, contents) => {
     const uri = toFileUrl(filename).toString();
-    if (uri.includes(".svelte") || uri.includes(".ts") || uri.includes(".js")) {
+    if (uri.endsWith(".svelte") || uri.endsWith(".ts") || uri.endsWith(".js")) {
       if (VFS.fileExists(uri) === false) {
         VFS.writeFile(uri, contents);
         ts.sys.writeFile(VFS.normalize(uri), contents);
@@ -374,6 +374,7 @@ export function startServer(options?: LSOptions) {
 
   connection.onInitialized(() => {
     if (
+      !watcher &&
       configManager.getClientCapabilities()?.workspace?.didChangeWatchedFiles
         ?.dynamicRegistration
     ) {
@@ -423,7 +424,9 @@ export function startServer(options?: LSOptions) {
 
   connection.onDidOpenTextDocument((evt) => {
     if (
-      !evt.textDocument.uri.endsWith(".svelte") ||
+      !evt.textDocument.uri
+        .slice(evt.textDocument.uri.lastIndexOf("."))
+        .startsWith(".sv") ||
       evt.textDocument.languageId !== "svelte"
     ) {
       return;
@@ -695,4 +698,9 @@ export function startServer(options?: LSOptions) {
   });
 
   connection.listen();
+
+  return () => {
+    connection?.dispose();
+    watcher?.dispose();
+  };
 }

@@ -21,6 +21,8 @@ import {
   CompletionItemKind,
   CompletionList,
   DiagnosticSeverity,
+  TextDocumentContentChangeEvent,
+  VersionedTextDocumentIdentifier,
 } from "vscode-languageserver-protocol";
 import {
   Diagnostic,
@@ -292,6 +294,18 @@ class DiagnosticsManager {
   }, 1000);
 }
 
+const JS_TS_EXTS = [
+  ".ts",
+  ".d.ts",
+  ".js",
+  ".mjs",
+  ".jsx",
+  ".tsx",
+  ".cjs",
+  ".mts",
+  ".cts",
+] as const;
+
 const docManagerEvents = [
   "documentChange",
   "documentClose",
@@ -318,6 +332,28 @@ class DocumentManager {
     return Array.from(this.documents.values());
   }
 
+  public updateDocument(
+    textDocument: VersionedTextDocumentIdentifier,
+    changes: TextDocumentContentChangeEvent[]
+  ) {
+    const document = this.documents.get(textDocument.uri);
+    if (!document) {
+      throw new Error("Cannot call methods on an unopened document");
+    }
+
+    for (const change of changes) {
+      let start = 0;
+      let end = 0;
+      if ("range" in change) {
+        start = document.offsetAt(change.range.start);
+        end = document.offsetAt(change.range.end);
+      } else {
+        end = document.getTextLength();
+      }
+
+      document.update(change.text, start, end);
+    }
+  }
   public openDocument(
     uri: string,
     languageId: string,
@@ -432,6 +468,11 @@ export const createServer = ({ connection }: { connection: Connection }) => {
     };
 
     const compilerHost = ts.createCompilerHost(compilerOptions);
+    const resolutionCache = ts.createModuleResolutionCache(
+      "/",
+      compilerHost.getCanonicalFileName,
+      compilerOptions
+    );
 
     const scriptFileNameCache = () => {
       const __cache = new Cache<string[]>(10);
@@ -442,15 +483,7 @@ export const createServer = ({ connection }: { connection: Connection }) => {
       log: (message) => console.debug(`[ts] ${message}`),
       getCompilationSettings: () => getCompilerOptions().options,
       getScriptFileNames() {
-        return Array.from(readdirSync("/")).filter(
-          (key) =>
-            !key.includes("/node_modules") &&
-            (key.endsWith(".ts") ||
-              key.endsWith(".tsx") ||
-              key.endsWith(".js") ||
-              key.endsWith(".jsx") ||
-              key.endsWith(".js"))
-        );
+        return VFS.readDirectory("/", JS_TS_EXTS, ["node_modules"]);
       },
       getCompilerHost() {
         return compilerHost;
@@ -458,7 +491,6 @@ export const createServer = ({ connection }: { connection: Connection }) => {
       writeFile: (filename, content) => {
         ts.sys.writeFile(filename, content, false);
         VFS.writeFile(filename, content);
-        compilerHost.writeFile(filename, content, false);
       },
       realpath: realpathSync,
       getScriptVersion: function getScriptVersion(fileName) {
@@ -482,9 +514,7 @@ export const createServer = ({ connection }: { connection: Connection }) => {
         return VFS.readDirectory(path, extensions, excludes, includes, depth);
       },
       getDirectories: (...args) => {
-        return VFS.getDirectories(...args).filter(
-          (v) => !v.includes("/node_modules/")
-        );
+        return VFS.getDirectories(...args);
       },
       useCaseSensitiveFileNames: () => ts.sys.useCaseSensitiveFileNames,
       getScriptKind: function getSnapshot(fileName: string) {
@@ -504,8 +534,6 @@ export const createServer = ({ connection }: { connection: Connection }) => {
             return ts.ScriptKind.Unknown;
         }
       },
-      resolveModuleNameLiterals: compilerHost.resolveModuleNameLiterals,
-
       getProjectVersion: () => projectVersion.toString(),
       getNewLine: () => ts.sys.newLine,
     };
@@ -522,18 +550,20 @@ export const createServer = ({ connection }: { connection: Connection }) => {
         fileName: string,
         content: string
       ) {
-        return this.createFile(fileName, content);
+        fileVersions.set(fileName, (fileVersions.get(fileName) || 0) + 1);
+        VFS.writeFile(fileName, content);
+        ts.sys.writeFile(fileName, content, false);
+        compilerHost.writeFile(fileName, content, false);
+        projectVersion++;
       },
       createFile: function (
         this: LanguageServiceWithFileMethods,
         fileName: string,
         content: string
       ) {
-        fileVersions.set(fileName, (fileVersions.get(fileName) || 0) + 1);
-        VFS.writeFile(fileName, content);
-        ts.sys.writeFile(fileName, content, false);
-        projectVersion++;
         sendFileSync(fileName, content);
+
+        return this.updateFile(fileName, content);
       },
     };
 
@@ -542,7 +572,7 @@ export const createServer = ({ connection }: { connection: Connection }) => {
 
   let env = createLanguageService();
   handleFSSync((name, contents) => {
-    if (name.endsWith(".ts") || name.endsWith(".js")) {
+    if (JS_TS_EXTS.some((ext) => name.endsWith(ext))) {
       env.updateFile(normalizePath(name), contents);
     } else {
       VFS.writeFile(name, contents);
@@ -616,18 +646,19 @@ export const createServer = ({ connection }: { connection: Connection }) => {
     params: CompletionParams,
     cancellationToken: CancellationToken
   ): Promise<CompletionList> {
+    const dispose = cancellationToken.onCancellationRequested(() => {
+      throw null;
+    });
     try {
-      cancellationToken.onCancellationRequested(() => {
-        throw null;
-      });
-
       const result = env.getCompletionsAtPosition(filePath, pos, {
+        includePackageJsonAutoImports: "on",
         includeCompletionsForImportStatements: true,
         includeCompletionsForModuleExports: true,
         triggerKind: params.context.triggerKind,
         includeCompletionsWithInsertText: true,
+        triggerCharacter: params.context
+          .triggerCharacter as ts.CompletionsTriggerCharacter,
         useLabelDetailsInCompletionEntries: true,
-        allowIncompleteCompletions: false,
         includeAutomaticOptionalChainCompletions: true,
         includeCompletionsWithSnippetText: true,
         includeCompletionsWithClassMemberSnippets: true,
@@ -641,7 +672,6 @@ export const createServer = ({ connection }: { connection: Connection }) => {
         items: result.entries
           .filter((v) => v !== null && v !== undefined)
           .map((entry) => {
-            if (cancellationToken.isCancellationRequested) throw null;
             return {
               ...entry,
               label: entry.name,
@@ -654,6 +684,8 @@ export const createServer = ({ connection }: { connection: Connection }) => {
       return list;
     } catch (error) {
       return null;
+    } finally {
+      dispose.dispose();
     }
   }
 
@@ -724,7 +756,7 @@ export const createServer = ({ connection }: { connection: Connection }) => {
   connection.onDidOpenTextDocument((params) => {
     const filePath = normalizePath(params.textDocument.uri);
     const content = params.textDocument.text;
-    docManager.openDocument(
+    const doc = docManager.openDocument(
       params.textDocument.uri,
       params.textDocument.languageId,
       params.textDocument.version,
@@ -732,27 +764,23 @@ export const createServer = ({ connection }: { connection: Connection }) => {
     );
 
     currentDir = dirname(filePath);
-    updateFile(filePath, content);
+    env.createFile(filePath, content);
+    docManager.scheduleUpdate(doc);
   });
 
-  connection.onDidChangeTextDocument(
-    debounceSameArg(
-      (params) => {
-        const filePath = normalizePath(params.textDocument.uri);
-        const content = params.contentChanges[0].text;
-        const doc = docManager.getDocument(params.textDocument.uri);
+  connection.onDidChangeTextDocument(async (params) => {
+    const filePath = normalizePath(params.textDocument.uri);
+    const content = params.contentChanges[0].text;
+    const doc = docManager.getDocument(params.textDocument.uri);
 
-        doc.update(content, 0, content.length);
+    docManager.updateDocument(params.textDocument, params.contentChanges);
 
-        if (currentDir !== dirname(filePath)) {
-          currentDir = dirname(filePath);
-        }
-        updateFile(filePath, content);
-      },
-      (a, b) => a?.textDocument?.uri === b?.textDocument?.uri,
-      500
-    )
-  );
+    if (currentDir !== dirname(filePath)) {
+      currentDir = dirname(filePath);
+    }
+    env.createFile(filePath, content);
+    docManager.scheduleUpdate(doc);
+  });
 
   connection.onCompletion(async (params, cancellationToken) => {
     const filePath = normalizePath(params.textDocument.uri);
@@ -795,9 +823,13 @@ export const createServer = ({ connection }: { connection: Connection }) => {
         },
       ],
     });
-  }, 100);
+  }, 32);
 
   connection.onHover(onHover);
 
   connection.listen();
+
+  return () => {
+    connection.dispose();
+  };
 };

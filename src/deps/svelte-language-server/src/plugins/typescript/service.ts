@@ -24,6 +24,7 @@ import {
   getNearestWorkspaceUri,
   hasTsExtensions,
 } from "./utils";
+import { readFileSync } from "fs";
 
 export interface LanguageServiceContainer {
   readonly tsconfigPath: string;

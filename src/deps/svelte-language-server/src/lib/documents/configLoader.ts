@@ -211,7 +211,7 @@ export class ConfigLoader {
         );
         configFile = configFile.replace(
           /import.+\{.+vitePreprocess.+\}.+from ["']@sveltejs\/vite-plugin-svelte["']/gm,
-          "import sveltePreprocess from 'svelte-preprocess'"
+          "import sveltePreprocess from 'svelte-preprocess';"
         );
       }
 

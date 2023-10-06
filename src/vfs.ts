@@ -7,7 +7,6 @@ import {
   type WatchListener,
   type FSWatcher as _FSWatcher,
 } from "fs";
-import process from "process";
 import {
   ParsedTsconfig,
   type FileWatcherCallback,
@@ -16,9 +15,9 @@ import {
 import _path from "./deps/path-deno";
 import json from "./libs.json";
 import { addKitToDefaultExport, extractKitProperty } from "./vfs.utils";
-import { syncFiles } from "./features/workspace";
-import { basename } from "path";
 import svelteTypes from "./svelte-types.json";
+
+const SVELTEKIT_CONFIG_ADAPTER_REGEX = /adapter: .[\w\(\{\}\)\,]+?(\n|\t)/gm;
 
 type EventListener = (
   eventType: WatchEventType | "close" | "error",
@@ -91,7 +90,7 @@ class FSWatcherImpl extends EventEmitter.EventEmitter implements _FSWatcher {
   }
 
   private handleFileChange(eventType: string, changedPath: string) {
-    changedPath = VFS.normalize(changedPath);
+    console.log({ eventType, changedPath, path: this.path });
     if (
       (changedPath !== "/" && this.path.includes(changedPath)) ||
       changedPath === this.path
@@ -109,9 +108,12 @@ export const FSWatcher: new (
 ) => _FSWatcher = FSWatcherImpl as any;
 
 class VFSImpl extends EventEmitter.EventEmitter {
+  constructor() {
+    super();
+  }
+
   // Maps symlink paths to their targets
   private symlinkMap: Map<string, string> = new Map();
-  private tsConfigPaths: ParsedTsconfig["options"]["paths"] = {};
 
   public readonly output: string[] = [];
 
@@ -126,8 +128,7 @@ class VFSImpl extends EventEmitter.EventEmitter {
 
   // VFS Methods
   public createDirectory(path: string) {
-    this.emit("change", "change", _path.posix.dirname(this.normalize(path)));
-
+    this.emit("change", "change", this.normalize(path));
     const parts = path.split("/");
     let curPath = "/";
     for (const dir of parts) {
@@ -164,23 +165,28 @@ class VFSImpl extends EventEmitter.EventEmitter {
   }
 
   public normalize(path: string) {
-    return _path.posix.normalize(
-      _path.posix.fromFileUrl(
-        path.startsWith("file:///")
-          ? path
-          : new URL(_path.posix.toFileUrl(_path.posix.resolve(path))).toString()
+    return _path.posix.resolve(
+      _path.posix.normalize(
+        _path.posix.fromFileUrl(
+          path.startsWith("file:///")
+            ? path
+            : new URL(
+                _path.posix.toFileUrl(_path.posix.resolve(path))
+              ).toString()
+        )
       )
     );
   }
 
   public readDirectoryRaw(path: string) {
     let files = [...sys.entries()]
-      .filter(([name, file]) => name.startsWith(this.normalize(path)))
+      .filter(([name]) => name.startsWith(this.normalize(path)))
       .map(
         ([name, file]) => [name, file.type] as [name: string, type: FileType]
       );
     return files;
   }
+
   public readDirectory(
     path: string,
     extensions?: readonly string[],
@@ -280,29 +286,32 @@ class VFSImpl extends EventEmitter.EventEmitter {
   public writeFile(path: string, data: string, writeByteOrderMark?: boolean) {
     const normalizedPath = this.normalize(path);
     this.createDirectory(_path.posix.dirname(normalizedPath));
-    if (normalizedPath.includes("svelte.config.")) {
-      const kit = extractKitProperty(data);
-      if (kit) {
-        const baseModule = getBaseSvelteConfig();
-        const newConfig = addKitToDefaultExport(baseModule, kit).replace(
-          /adapter: .[\w\(\{\}\)\,]+?(\n|\t)/gm,
-          "adapter:()=> {}"
-        );
+    try {
+      if (normalizedPath.includes("svelte.config.")) {
+        const kit = extractKitProperty(data);
 
-        this.emit("change", "change", normalizedPath);
-        return sys.set(normalizedPath, {
-          content: newConfig,
-          type: FileType.File,
-        });
+        if (kit) {
+          const baseModule = getBaseSvelteConfig();
+          const newConfig = addKitToDefaultExport(baseModule, kit).replace(
+            SVELTEKIT_CONFIG_ADAPTER_REGEX,
+            "adapter:()=> {}"
+          );
+
+          return sys.set(normalizedPath, {
+            content: newConfig,
+            type: FileType.File,
+          });
+        }
       }
-    }
 
-    this.emit("change", "change", normalizedPath);
-    return sys.set(normalizedPath, { content: data, type: FileType.File });
+      return sys.set(normalizedPath, { content: data, type: FileType.File });
+    } finally {
+      this.emit("change", "change", this.normalize(path));
+    }
   }
 }
 
-/* Create an in-memory file watcher */
+/* VFS with in-memory file watching methods */
 class VFSWithFileWatching extends VFSImpl {
   public watchDirectory = (
     path: string,
@@ -359,6 +368,7 @@ for (const key in json) {
   const value = json[key] as string;
   VFS.writeFile(key, value);
 }
+
 VFS.writeFile("file:///svelte.config.js", getBaseSvelteConfig());
 
 for (const key in svelteTypes) {
@@ -366,34 +376,6 @@ for (const key in svelteTypes) {
 
   VFS.writeFile(key, value);
 }
-
-// Create the tsConfig (should be done somewhere else!)
-if (!VFS.fileExists("/tsconfig.json"))
-  VFS.writeFile(
-    "/tsconfig.json",
-    `{
-	"compilerOptions": {
-		"target": "ESNext",
-		"useDefineForClassFields": true,
-		"module": "ESNext",
-		"lib": ["ES2020","ESNext", "DOM", "DOM.Iterable"],
-
-		/* Bundler mode */
-		"moduleResolution": "Node",
-		"resolveJsonModule": true,
-		"isolatedModules": true,
-		"noEmit": true,
-		"strict": true,
-    "allowJs": true,
-		"noUnusedLocals": true,
-		"skipLibCheck": true,
-		"noUnusedParameters": true,
-		"noFallthroughCasesInSwitch": true
-	},
-  "include": ["**/*.d.ts", "**/*.ts", "**/*.js", "**/*.svelte"],
-}
-`
-  );
 
 function getBaseSvelteConfig(): string {
   return `

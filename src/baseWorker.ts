@@ -14,13 +14,21 @@ import {
 } from "./messages";
 import { VFS } from "./vfs";
 
+import {
+  BrowserMessageReader,
+  BrowserMessageWriter,
+  createConnection,
+} from "vscode-languageserver/browser";
+
 addEventListener("messageerror", (e) => console.error(e));
 addEventListener("error", (e) => console.error(e));
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
+let server: () => void;
+
 export const BaseWorker = (
-  createServer: ({ connection }: { connection: Connection }) => void,
+  createServer: ({ connection }: { connection: Connection }) => () => void,
   connection: Connection,
   name: string
 ) => {
@@ -38,6 +46,33 @@ export const BaseWorker = (
     "method" in data &&
     workerRPCMethods.includes(data.method as never);
 
+  const handleRestartLS = async ({ textDocument: { uri: fileName } }) => {
+    if (
+      server &&
+      fileName.includes("node_modules") === false &&
+      (fileName.includes("package.json") ||
+        fileName.includes("tsconfig.json") ||
+        fileName.includes("jsconfig.json"))
+    ) {
+      server();
+
+      await tick();
+      connection = createConnection(
+        new BrowserMessageReader(
+          globalThis as unknown as DedicatedWorkerGlobalScope
+        ),
+        new BrowserMessageWriter(
+          globalThis as unknown as DedicatedWorkerGlobalScope
+        )
+      );
+
+      connection.onDidChangeTextDocument(handleRestartLS);
+
+      server = createServer({ connection: connection });
+    }
+  };
+
+  connection.onDidChangeTextDocument(handleRestartLS);
   try {
     console.log(`${name} Language Server running. Waiting for setup message.`);
 
@@ -104,6 +139,9 @@ export const BaseWorker = (
     });
 
     addEventListener("message", async (event) => {
+      if (event.ports.length) {
+      }
+
       // Process our custom RPC messages
       if (isRPCMessage(event.data)) {
         if (event.data.method === "@@fetch-types") {
@@ -127,21 +165,15 @@ export const BaseWorker = (
           } as WorkerResponse<"@@delete-file">);
           return;
         }
-        updateVFS(event.data.params);
-        await tick();
+        await updateVFS(event.data.params);
         if (event.data.method === "@@setup") {
           console.log(`Setting up ${name} Language Server...`);
-          setupQueue.push(event.data.id);
-          await tick();
-          createServer({ connection: connection });
-          await tick();
-          queueMicrotask(() => {
-            postMessage({
-              method: "@@setup",
-              id: event.data.id,
-              complete: true,
-            } as WorkerResponse<"@@setup">);
-          });
+          server = createServer({ connection: connection });
+          postMessage({
+            method: "@@setup",
+            id: event.data.id,
+            complete: true,
+          } as WorkerResponse<"@@setup">);
         } else {
           postMessage({
             method: "@@add-files",
