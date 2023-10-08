@@ -90,7 +90,6 @@ class FSWatcherImpl extends EventEmitter.EventEmitter implements _FSWatcher {
   }
 
   private handleFileChange(eventType: string, changedPath: string) {
-    console.log({ eventType, changedPath, path: this.path });
     if (
       (changedPath !== "/" && this.path.includes(changedPath)) ||
       changedPath === this.path

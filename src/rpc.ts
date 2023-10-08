@@ -42,7 +42,7 @@ type Files = Record<FileName, FileContents>;
  * A class that wraps the Worker and provides a simple RPC interface.
  *
  * @example
- * C
+ *
  * ```ts
  * const svelteRpc = new WorkerRPC("/path/to/worker.js", {
  * 	languageId: "svelte",

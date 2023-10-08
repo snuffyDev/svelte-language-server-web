@@ -20,8 +20,8 @@ import {
   createConnection,
 } from "vscode-languageserver/browser";
 
-addEventListener("messageerror", (e) => console.error(e));
-addEventListener("error", (e) => console.error(e));
+addEventListener("messageerror", (e) => console.debug(Error(`${e}`)));
+addEventListener("error", (e) => console.debug(Error(`${e}`)));
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
