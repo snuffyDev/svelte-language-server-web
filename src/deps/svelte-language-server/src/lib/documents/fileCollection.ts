@@ -72,6 +72,7 @@ export class FileMap<T> implements Iterable<[string, T]> {
     return this.map[Symbol.iterator]();
   }
 }
+
 export class FileSet implements Iterable<string> {
   private getCanonicalFileName: GetCanonicalFileName;
   private readonly set = new Set<string>();

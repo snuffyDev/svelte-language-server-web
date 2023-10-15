@@ -27,6 +27,8 @@ import {
   mapHoverToParent,
   mapSelectionRangeToParent,
   isInTag,
+  mapRangeToOriginal,
+  TagInformation,
 } from "../../lib/documents";
 import { LSConfigManager, LSCSSConfig } from "../../ls-config";
 import {
@@ -35,6 +37,7 @@ import {
   DiagnosticsProvider,
   DocumentColorsProvider,
   DocumentSymbolsProvider,
+  FoldingRangeProvider,
   HoverProvider,
   SelectionRangeProvider,
 } from "../interfaces";
@@ -52,6 +55,8 @@ import {
 } from "../../lib/documents/parseHtml";
 import { StyleAttributeDocument } from "./StyleAttributeDocument";
 import { getDocumentContext } from "../documentContext";
+import { FoldingRange, FoldingRangeKind } from "vscode-languageserver-types";
+import { indentBasedFoldingRangeForTag } from "../../lib/foldingRange/indentFolding";
 
 export class CSSPlugin
   implements
@@ -61,7 +66,8 @@ export class CSSPlugin
     DocumentColorsProvider,
     ColorPresentationsProvider,
     DocumentSymbolsProvider,
-    SelectionRangeProvider
+    SelectionRangeProvider,
+    FoldingRangeProvider
 {
   __name = "css";
   private configManager: LSConfigManager;
@@ -426,6 +432,71 @@ export class CSSPlugin
       .map((symbol) => mapSymbolInformationToOriginal(cssDocument, symbol));
   }
 
+  getFoldingRanges(document: Document): FoldingRange[] {
+    if (!document.styleInfo) {
+      return [];
+    }
+
+    const cssDocument = this.getCSSDoc(document);
+
+    if (shouldUseIndentBasedFolding(cssDocument.languageId)) {
+      return this.nonSyntacticFolding(document, document.styleInfo);
+    }
+
+    return this.getLanguageService(extractLanguage(cssDocument))
+      .getFoldingRanges(cssDocument)
+      .map((range) => {
+        const originalRange = mapRangeToOriginal(cssDocument, {
+          start: {
+            line: range.startLine,
+            character: range.startCharacter ?? 0,
+          },
+          end: { line: range.endLine, character: range.endCharacter ?? 0 },
+        });
+
+        return {
+          startLine: originalRange.start.line,
+          endLine: originalRange.end.line,
+          kind: range.kind,
+        };
+      });
+  }
+
+  private nonSyntacticFolding(
+    document: Document,
+    styleInfo: TagInformation
+  ): FoldingRange[] {
+    const ranges = indentBasedFoldingRangeForTag(document, styleInfo);
+    const startRegion = /^\s*(\/\/|\/\*\*?)\s*#?region\b/;
+    const endRegion = /^\s*(\/\/|\/\*\*?)\s*#?endregion\b/;
+
+    const lines = document
+      .getText()
+      .split(/\r?\n/)
+      .slice(styleInfo.startPos.line, styleInfo.endPos.line);
+
+    let start = -1;
+
+    for (let index = 0; index < lines.length; index++) {
+      const line = lines[index];
+
+      if (startRegion.test(line)) {
+        start = index;
+      } else if (endRegion.test(line)) {
+        if (start >= 0) {
+          ranges.push({
+            startLine: start + styleInfo.startPos.line,
+            endLine: index + styleInfo.startPos.line,
+            kind: FoldingRangeKind.Region,
+          });
+        }
+        start = -1;
+      }
+    }
+
+    return ranges.sort((a, b) => a.startLine - b.startLine);
+  }
+
   private getCSSDoc(document: Document) {
     let cssDoc = this.cssDocuments.get(document);
     if (!cssDoc || cssDoc.version < document.version) {
@@ -505,6 +576,18 @@ function shouldExcludeHover(document: CSSDocument) {
 
 function shouldExcludeColor(document: CSSDocument) {
   switch (extractLanguage(document)) {
+    case "sass":
+    case "stylus":
+    case "styl":
+      return true;
+    default:
+      return false;
+  }
+}
+
+function shouldUseIndentBasedFolding(kind?: string) {
+  switch (kind) {
+    case "postcss":
     case "sass":
     case "stylus":
     case "styl":

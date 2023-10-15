@@ -11,6 +11,7 @@ import {
   DefinitionLink,
   Diagnostic,
   FileChangeType,
+  FoldingRange,
   Hover,
   InlayHint,
   Location,
@@ -33,23 +34,21 @@ import {
   mapSymbolInformationToOriginal,
 } from "../../lib/documents";
 import { LSConfigManager, LSTypescriptConfig } from "../../ls-config";
-import {
-  isNotNullOrUndefined,
-  isZeroLengthRange,
-  pathToUrl,
-} from "../../utils";
+import { isNotNullOrUndefined, isZeroLengthRange } from "../../utils";
 import {
   AppCompletionItem,
   AppCompletionList,
+  CallHierarchyProvider,
   CodeActionsProvider,
   CompletionsProvider,
   DefinitionsProvider,
   DiagnosticsProvider,
   DocumentSymbolsProvider,
-  FileRename,
-  FindReferencesProvider,
   FileReferencesProvider,
+  FileRename,
   FindComponentReferencesProvider,
+  FindReferencesProvider,
+  FoldingRangeProvider,
   HoverProvider,
   ImplementationProvider,
   InlayHintProvider,
@@ -62,18 +61,20 @@ import {
   TypeDefinitionProvider,
   UpdateImportsProvider,
   UpdateTsOrJsFile,
-  CallHierarchyProvider,
 } from "../interfaces";
+import { LSAndTSDocResolver } from "./LSAndTSDocResolver";
+import { ignoredBuildDirectories } from "./SnapshotManager";
+import { CallHierarchyProviderImpl } from "./features/CallHierarchyProvider";
 import { CodeActionsProviderImpl } from "./features/CodeActionsProvider";
 import {
   CompletionEntryWithIdentifier,
   CompletionsProviderImpl,
 } from "./features/CompletionProvider";
 import { DiagnosticsProviderImpl } from "./features/DiagnosticsProvider";
-import { FindFileReferencesProviderImpl } from "./features/FindFileReferencesProvider";
 import { FindComponentReferencesProviderImpl } from "./features/FindComponentReferencesProvider";
+import { FindFileReferencesProviderImpl } from "./features/FindFileReferencesProvider";
 import { FindReferencesProviderImpl } from "./features/FindReferencesProvider";
-import { getDirectiveCommentCompletions } from "./features/getDirectiveCommentCompletions";
+import { FoldingRangeProviderImpl } from "./features/FoldingRangeProvider";
 import { HoverProviderImpl } from "./features/HoverProvider";
 import { ImplementationProviderImpl } from "./features/ImplementationProvider";
 import { InlayHintProviderImpl } from "./features/InlayHintProvider";
@@ -83,13 +84,12 @@ import { SemanticTokensProviderImpl } from "./features/SemanticTokensProvider";
 import { SignatureHelpProviderImpl } from "./features/SignatureHelpProvider";
 import { TypeDefinitionProviderImpl } from "./features/TypeDefinitionProvider";
 import { UpdateImportsProviderImpl } from "./features/UpdateImportsProvider";
+import { getDirectiveCommentCompletions } from "./features/getDirectiveCommentCompletions";
 import {
+  SnapshotMap,
   is$storeVariableIn$storeDeclaration,
   isTextSpanInGeneratedCode,
-  SnapshotMap,
 } from "./features/utils";
-import { LSAndTSDocResolver } from "./LSAndTSDocResolver";
-import { ignoredBuildDirectories } from "./SnapshotManager";
 import {
   isAttributeName,
   isAttributeShorthand,
@@ -102,8 +102,6 @@ import {
   isInScript,
   symbolKindFromString,
 } from "./utils";
-import { CallHierarchyProviderImpl } from "./features/CallHierarchyProvider";
-import { URI } from "vscode-uri";
 
 export class TypeScriptPlugin
   implements
@@ -124,6 +122,7 @@ export class TypeScriptPlugin
     TypeDefinitionProvider,
     InlayHintProvider,
     CallHierarchyProvider,
+    FoldingRangeProvider,
     OnWatchFileChanges,
     CompletionsProvider<CompletionEntryWithIdentifier>,
     UpdateTsOrJsFile
@@ -147,6 +146,7 @@ export class TypeScriptPlugin
   private readonly implementationProvider: ImplementationProviderImpl;
   private readonly typeDefinitionProvider: TypeDefinitionProviderImpl;
   private readonly inlayHintProvider: InlayHintProviderImpl;
+  private readonly foldingRangeProvider: FoldingRangeProviderImpl;
   private readonly callHierarchyProvider: CallHierarchyProviderImpl;
 
   constructor(
@@ -177,14 +177,15 @@ export class TypeScriptPlugin
       configManager
     );
     this.hoverProvider = new HoverProviderImpl(this.lsAndTsDocResolver);
-    this.findReferencesProvider = new FindReferencesProviderImpl(
-      this.lsAndTsDocResolver
-    );
     this.findFileReferencesProvider = new FindFileReferencesProviderImpl(
       this.lsAndTsDocResolver
     );
     this.findComponentReferencesProvider =
       new FindComponentReferencesProviderImpl(this.lsAndTsDocResolver);
+    this.findReferencesProvider = new FindReferencesProviderImpl(
+      this.lsAndTsDocResolver,
+      this.findComponentReferencesProvider
+    );
     this.selectionRangeProvider = new SelectionRangeProviderImpl(
       this.lsAndTsDocResolver
     );
@@ -204,6 +205,10 @@ export class TypeScriptPlugin
     this.callHierarchyProvider = new CallHierarchyProviderImpl(
       this.lsAndTsDocResolver,
       workspaceUris
+    );
+    this.foldingRangeProvider = new FoldingRangeProviderImpl(
+      this.lsAndTsDocResolver,
+      configManager
     );
   }
 
@@ -234,7 +239,8 @@ export class TypeScriptPlugin
       return [];
     }
 
-    const { lang, tsDoc } = await this.getLSAndTSDoc(document);
+    const { lang, tsDoc } =
+      await this.lsAndTsDocResolver.getLsForSyntheticOperations(document);
 
     if (cancellationToken?.isCancellationRequested) {
       return [];
@@ -391,9 +397,9 @@ export class TypeScriptPlugin
     document: Document,
     position: Position
   ): Promise<DefinitionLink[]> {
-    const { scheme, authority } = URI.parse(document.getURL());
-
-    const { lang, tsDoc } = await this.getLSAndTSDoc(document);
+    const { lang, tsDoc } = await this.lsAndTsDocResolver.getLSAndTSDoc(
+      document
+    );
 
     const defs = lang.getDefinitionAndBoundSpan(
       tsDoc.filePath,
@@ -438,7 +444,7 @@ export class TypeScriptPlugin
           def.textSpan
         );
         return LocationLink.create(
-          URI.from({ scheme, authority, path: def.fileName }).toString(),
+          defLocation.uri,
           defLocation.range,
           defLocation.range,
           convertToLocationRange(tsDoc, defs.textSpan)
@@ -700,8 +706,8 @@ export class TypeScriptPlugin
     return this.callHierarchyProvider.getOutgoingCalls(item, cancellationToken);
   }
 
-  private async getLSAndTSDoc(document: Document) {
-    return this.lsAndTsDocResolver.getLSAndTSDoc(document);
+  async getFoldingRanges(document: Document): Promise<FoldingRange[]> {
+    return this.foldingRangeProvider.getFoldingRanges(document);
   }
 
   /**

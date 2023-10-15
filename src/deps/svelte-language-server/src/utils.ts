@@ -1,7 +1,8 @@
-import { isEqual, uniqWith } from "lodash-es";
-import { Node } from "vscode-html-languageservice";
+import { isEqual, sum, uniqWith } from "lodash";
+import { FoldingRange, Node } from "vscode-html-languageservice";
 import { Position, Range } from "vscode-languageserver/browser";
 import { URI } from "vscode-uri";
+import { Document, TagInformation } from "./lib/documents";
 
 type Predicate<T> = (x: T) => boolean;
 
@@ -27,10 +28,10 @@ export function clamp(num: number, min: number, max: number): number {
 
 export function urlToPath(stringUrl: string): string | null {
   const url = URI.parse(stringUrl);
-  // if (url.scheme !== "file") {
-  // 	return null;
-  // }
-  return url.path.replace(/\\/g, "/");
+  if (url.scheme !== "file") {
+    return null;
+  }
+  return url.fsPath.replace(/\\/g, "/");
 }
 
 export function pathToUrl(path: string) {
@@ -51,7 +52,7 @@ export function normalizePath(path: string): string {
  * This normalizes them to be the same as the internally generated ones.
  */
 export function normalizeUri(uri: string): string {
-  return URI.parse(uri).toString(true);
+  return URI.parse(uri).toString();
 }
 
 /**
@@ -67,7 +68,7 @@ export function flatten<T>(arr: Array<T | T[]>): T[] {
     (all: T[], item) =>
       Array.isArray(item) ? [...all, ...item] : [...all, item],
     []
-  ) as T[];
+  );
 }
 
 /**

@@ -44,14 +44,13 @@ export class SvelteDocument {
   public style: TagInformation | null;
   public languageId = "svelte";
   public version = 0;
-  public uri;
+  public uri = this.parent.uri;
   public get config() {
     return this.parent.configPromise;
   }
 
   constructor(private parent: Document) {
     this.script = this.parent.scriptInfo;
-    this.uri = this.parent.uri;
     this.moduleScript = this.parent.moduleScriptInfo;
     this.style = this.parent.styleInfo;
     this.version = this.parent.version;

@@ -58,6 +58,7 @@ export enum DiagnosticCode {
   MISSING_PROP = 2741, // "Property '..' is missing in type '..' but required in type '..'."
   NO_OVERLOAD_MATCHES_CALL = 2769, // "No overload matches this call"
   CANNOT_FIND_NAME = 2304, // "Cannot find name 'xxx'"
+  EXPECTED_N_ARGUMENTS = 2554, // Expected {0} arguments, but got {1}.
 }
 
 export class DiagnosticsProviderImpl implements DiagnosticsProvider {
@@ -149,7 +150,12 @@ export class DiagnosticsProviderImpl implements DiagnosticsProvider {
 
     diagnostics = diagnostics
       .filter(notGenerated)
-      .filter(not(isUnusedReactiveStatementLabel));
+      .filter(not(isUnusedReactiveStatementLabel))
+      .filter(
+        (diagnostics) =>
+          !expectedTransitionThirdArgument(diagnostics, tsDoc, lang)
+      );
+
     diagnostics = resolveNoopsInReactiveStatements(lang, diagnostics);
 
     return diagnostics
@@ -563,4 +569,40 @@ function movePropsErrorRangeBackIfNecessary(
       end: snapshot.positionAt(propsDef.name.getEnd()),
     });
   }
+}
+
+function expectedTransitionThirdArgument(
+  diagnostic: ts.Diagnostic,
+  tsDoc: SvelteDocumentSnapshot,
+  lang: ts.LanguageService
+) {
+  if (
+    diagnostic.code !== DiagnosticCode.EXPECTED_N_ARGUMENTS ||
+    !diagnostic.start ||
+    !tsDoc
+      .getText(0, diagnostic.start)
+      .endsWith("__sveltets_2_ensureTransition(")
+  ) {
+    return false;
+  }
+
+  const node = findDiagnosticNode(diagnostic);
+  if (!node) {
+    return false;
+  }
+
+  const callExpression = findNodeAtSpan(
+    node,
+    { start: node.getStart(), length: node.getWidth() },
+    ts.isCallExpression
+  );
+  const signature =
+    callExpression &&
+    lang.getProgram()?.getTypeChecker().getResolvedSignature(callExpression);
+
+  return (
+    signature?.parameters.filter(
+      (parameter) => !(parameter.flags & ts.SymbolFlags.Optional)
+    ).length === 3
+  );
 }

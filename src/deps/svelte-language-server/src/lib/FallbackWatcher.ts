@@ -1,6 +1,6 @@
 import { FSWatcher, watch } from "chokidar";
-import { debounce } from "lodash-es";
-import { join, posix } from "path";
+import { debounce } from "lodash";
+import { join } from "path";
 import {
   DidChangeWatchedFilesParams,
   FileChangeType,
@@ -45,7 +45,7 @@ export class FallbackWatcher {
   private convert(path: string, type: FileChangeType): FileEvent {
     return {
       type,
-      uri: pathToUrl(path).toString(),
+      uri: pathToUrl(path),
     };
   }
 

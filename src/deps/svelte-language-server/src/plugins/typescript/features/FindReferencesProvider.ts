@@ -1,17 +1,21 @@
-import type ts from "typescript";
+import ts from "typescript";
 import {
   Location,
   Position,
   ReferenceContext,
 } from "vscode-languageserver/browser";
 import { Document } from "../../../lib/documents";
-import { flatten, isNotNullOrUndefined } from "../../../utils";
-import { FindReferencesProvider } from "../../interfaces";
+import { flatten, isNotNullOrUndefined, pathToUrl } from "../../../utils";
+import {
+  FindComponentReferencesProvider,
+  FindReferencesProvider,
+} from "../../interfaces";
 import { SvelteDocumentSnapshot } from "../DocumentSnapshot";
 import { LSAndTSDocResolver } from "../LSAndTSDocResolver";
 import {
   convertToLocationForReferenceOrDefinition,
   hasNonZeroRange,
+  isGeneratedSvelteComponentName,
 } from "../utils";
 import {
   get$storeOffsetOf$storeDeclaration,
@@ -21,19 +25,26 @@ import {
   isTextSpanInGeneratedCode,
   SnapshotMap,
 } from "./utils";
-import { URI } from "vscode-uri";
 
 export class FindReferencesProviderImpl implements FindReferencesProvider {
-  constructor(private readonly lsAndTsDocResolver: LSAndTSDocResolver) {}
+  constructor(
+    private readonly lsAndTsDocResolver: LSAndTSDocResolver,
+    private readonly componentReferencesProvider: FindComponentReferencesProvider
+  ) {}
 
   async findReferences(
     document: Document,
     position: Position,
     context: ReferenceContext
   ): Promise<Location[] | null> {
-    const { scheme, authority } = URI.parse(document.getURL());
+    if (this.isScriptStartOrEndTag(position, document)) {
+      return this.componentReferencesProvider.findComponentReferences(
+        document.uri
+      );
+    }
+
     const { lang, tsDoc } = await this.getLSAndTSDoc(document);
-    const fragment = await tsDoc.getFullText();
+    const offset = tsDoc.offsetAt(tsDoc.getGeneratedPosition(position));
 
     const rawReferences = lang.findReferences(
       tsDoc.filePath,
@@ -46,7 +57,20 @@ export class FindReferencesProviderImpl implements FindReferencesProvider {
     const snapshots = new SnapshotMap(this.lsAndTsDocResolver);
     snapshots.set(tsDoc.filePath, tsDoc);
 
+    if (
+      rawReferences.some(
+        (ref) => ref.definition.kind === ts.ScriptElementKind.alias
+      )
+    ) {
+      const componentReferences =
+        await this.checkIfHasAliasedComponentReference(offset, tsDoc, lang);
+
+      if (componentReferences?.length) {
+        return componentReferences;
+      }
+    }
     const references = flatten(rawReferences.map((ref) => ref.references));
+
     references.push(
       ...(await this.getStoreReferences(references, tsDoc, snapshots, lang))
     );
@@ -60,6 +84,19 @@ export class FindReferencesProviderImpl implements FindReferencesProvider {
         .filter(isNotNullOrUndefined)
         // Possible $store references are added afterwards, sort for correct order
         .sort(sortLocationByFileAndRange)
+    );
+  }
+
+  private isScriptStartOrEndTag(position: Position, document: Document) {
+    if (!document.scriptInfo) {
+      return false;
+    }
+    const { start, end } = document.scriptInfo.container;
+
+    const offset = document.offsetAt(position);
+    return (
+      (offset >= start && offset <= start + "<script".length) ||
+      (offset >= end - "</script>".length && offset <= end)
     );
   }
 
@@ -133,6 +170,30 @@ export class FindReferencesProviderImpl implements FindReferencesProvider {
     }
 
     return [...storeReferences, ...$storeReferences];
+  }
+
+  private async checkIfHasAliasedComponentReference(
+    offset: number,
+    tsDoc: SvelteDocumentSnapshot,
+    lang: ts.LanguageService
+  ) {
+    const definitions = lang.getDefinitionAtPosition(tsDoc.filePath, offset);
+    if (!definitions?.length) {
+      return null;
+    }
+
+    const nonAliasDefinitions = definitions.filter((definition) =>
+      isGeneratedSvelteComponentName(definition.name)
+    );
+    const references = await Promise.all(
+      nonAliasDefinitions.map((definition) =>
+        this.componentReferencesProvider.findComponentReferences(
+          pathToUrl(definition.fileName)
+        )
+      )
+    );
+
+    return flatten(references.filter(isNotNullOrUndefined));
   }
 
   private async mapReference(

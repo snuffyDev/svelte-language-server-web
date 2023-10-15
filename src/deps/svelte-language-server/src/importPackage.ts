@@ -26,27 +26,25 @@ function dynamicRequire(dynamicFileToRequire: string): any {
 }
 
 export function getPackageInfo(packageName: string, fromPath: string) {
-  try {
-    const paths = [__dirname];
-    if (isTrusted) {
-      paths.unshift(fromPath);
-    }
-    const packageJSONPath = require.resolve(`${packageName}/package.json`, {
-      paths,
-    });
-    const { version } = dynamicRequire(packageJSONPath);
-    const [major, minor, patch] = version.split(".");
+  const paths = [__dirname];
+  if (isTrusted) {
+    paths.unshift(fromPath);
+  }
+  const packageJSONPath = require.resolve(`${packageName}/package.json`, {
+    paths,
+  });
+  const { version } = dynamicRequire(packageJSONPath);
+  const [major, minor, patch] = version.split(".");
 
-    return {
-      path: dirname(packageJSONPath),
-      version: {
-        full: version,
-        major: Number(major),
-        minor: Number(minor),
-        patch: Number(patch),
-      },
-    };
-  } catch (err) {}
+  return {
+    path: dirname(packageJSONPath),
+    version: {
+      full: version,
+      major: Number(major),
+      minor: Number(minor),
+      patch: Number(patch),
+    },
+  };
 }
 
 export function importPrettier(fromPath: string): typeof prettier {
@@ -66,7 +64,7 @@ export function importSvelte(fromPath: string): typeof svelte {
 export function importSveltePreprocess(
   fromPath: string
 ): typeof sveltePreprocess {
-  const pkg = getPackageInfo("svelte-preprocess", "/node_modules/");
+  const pkg = getPackageInfo("svelte-preprocess", fromPath);
   const main = resolve(pkg.path);
   Logger.debug("Using svelte-preprocess v" + pkg.version.full, "from", main);
   return dynamicRequire(main);

@@ -15,15 +15,14 @@ export interface CSSDocumentBase extends DocumentMapper, TextDocument {
 
 export class CSSDocument extends ReadableDocument implements DocumentMapper {
   private styleInfo: Pick<TagInformation, "attributes" | "start" | "end">;
-  declare readonly version: typeof this.parent.version;
+  readonly version = this.parent.version;
 
   public stylesheet: Stylesheet;
   public languageId: string;
 
   constructor(private parent: Document, languageServices: CSSLanguageServices) {
     super();
-    this.parent = parent;
-    this.version = this.parent.version;
+
     if (this.parent.styleInfo) {
       this.styleInfo = this.parent.styleInfo;
     } else {
@@ -72,10 +71,9 @@ export class CSSDocument extends ReadableDocument implements DocumentMapper {
    * Get the fragment text from the parent
    */
   getText(): string {
-    return (
-      this.parent.getText()?.slice(this.styleInfo.start, this.styleInfo.end) ??
-      ""
-    );
+    return this.parent
+      .getText()
+      .slice(this.styleInfo.start, this.styleInfo.end);
   }
 
   /**
