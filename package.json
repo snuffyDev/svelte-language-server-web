@@ -14,6 +14,7 @@
     "build": "node --max_old_space_size=16384 ./node_modules/tsup/dist/cli-node.js",
     "build:dev": "NODE_ENV=development node --max_old_space_size=16384 ./node_modules/tsup/dist/cli-node.js",
     "build:testing": "NODE_ENV=testing node  esbuild.js",
+    "format": "prettier --write 'src/deps/svelte-language-server/src/**/*.{js,ts}' './*.{ts,cjs,js}'",
     "build:ls": "",
     "preview": "vite preview"
   },

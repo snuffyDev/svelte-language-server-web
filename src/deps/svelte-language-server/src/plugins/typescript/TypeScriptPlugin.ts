@@ -391,7 +391,7 @@ export class TypeScriptPlugin
     document: Document,
     position: Position
   ): Promise<DefinitionLink[]> {
-		const { scheme, authority } = URI.parse(document.getURL());
+    const { scheme, authority } = URI.parse(document.getURL());
 
     const { lang, tsDoc } = await this.getLSAndTSDoc(document);
 
