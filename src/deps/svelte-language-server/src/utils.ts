@@ -1,40 +1,41 @@
-import { isEqual, uniqWith } from "lodash-es";
-import { Node } from "vscode-html-languageservice";
-import { Position, Range } from "vscode-languageserver/browser";
-import { URI } from "vscode-uri";
+import { isEqual, sum, uniqWith } from 'lodash';
+import { FoldingRange, Node } from 'vscode-html-languageservice';
+import { Position, Range } from 'vscode-languageserver';
+import { URI } from 'vscode-uri';
+import { Document, TagInformation } from './lib/documents';
 
 type Predicate<T> = (x: T) => boolean;
 
 export function not<T>(predicate: Predicate<T>) {
-  return (x: T) => !predicate(x);
+    return (x: T) => !predicate(x);
 }
 
 export function or<T>(...predicates: Array<Predicate<T>>) {
-  return (x: T) => predicates.some((predicate) => predicate(x));
+    return (x: T) => predicates.some((predicate) => predicate(x));
 }
 
 export function and<T>(...predicates: Array<Predicate<T>>) {
-  return (x: T) => predicates.every((predicate) => predicate(x));
+    return (x: T) => predicates.every((predicate) => predicate(x));
 }
 
 export function unique<T>(array: T[]): T[] {
-  return uniqWith(array, isEqual);
+    return uniqWith(array, isEqual);
 }
 
 export function clamp(num: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, num));
+    return Math.max(min, Math.min(max, num));
 }
 
 export function urlToPath(stringUrl: string): string | null {
-  const url = URI.parse(stringUrl);
-  // if (url.scheme !== "file") {
-  // 	return null;
-  // }
-  return url.path.replace(/\\/g, "/");
+    const url = URI.parse(stringUrl);
+    if (url.scheme !== 'file') {
+        return null;
+    }
+    return url.fsPath.replace(/\\/g, '/');
 }
 
 export function pathToUrl(path: string) {
-  return URI.file(path).toString();
+    return URI.file(path).toString();
 }
 
 /**
@@ -42,7 +43,7 @@ export function pathToUrl(path: string) {
  * This is normalized here.
  */
 export function normalizePath(path: string): string {
-  return URI.file(path).fsPath.replace(/\\/g, "/");
+    return URI.file(path).fsPath.replace(/\\/g, '/');
 }
 
 /**
@@ -51,7 +52,7 @@ export function normalizePath(path: string): string {
  * This normalizes them to be the same as the internally generated ones.
  */
 export function normalizeUri(uri: string): string {
-  return URI.parse(uri).toString(true);
+    return URI.parse(uri).toString();
 }
 
 /**
@@ -59,85 +60,73 @@ export function normalizeUri(uri: string): string {
  * (bar or bar.svelte in this example).
  */
 export function getLastPartOfPath(path: string): string {
-  return path.replace(/\\/g, "/").split("/").pop() || "";
+    return path.replace(/\\/g, '/').split('/').pop() || '';
 }
 
 export function flatten<T>(arr: Array<T | T[]>): T[] {
-  return arr.reduce(
-    (all: T[], item) =>
-      Array.isArray(item) ? [...all, ...item] : [...all, item],
-    []
-  ) as T[];
+    return arr.reduce(
+        (all: T[], item) => (Array.isArray(item) ? [...all, ...item] : [...all, item]),
+        []
+    );
 }
 
 /**
  * Map or keep original (passthrough) if the mapper returns undefined.
  */
 export function passMap<T>(array: T[], mapper: (x: T) => void | T[]) {
-  return array.map((x) => {
-    const mapped = mapper(x);
-    return mapped === undefined ? x : mapped;
-  });
+    return array.map((x) => {
+        const mapped = mapper(x);
+        return mapped === undefined ? x : mapped;
+    });
 }
 
 export function isInRange(range: Range, positionToTest: Position): boolean {
-  return (
-    isBeforeOrEqualToPosition(range.end, positionToTest) &&
-    isBeforeOrEqualToPosition(positionToTest, range.start)
-  );
+    return (
+        isBeforeOrEqualToPosition(range.end, positionToTest) &&
+        isBeforeOrEqualToPosition(positionToTest, range.start)
+    );
 }
 
 export function isZeroLengthRange(range: Range): boolean {
-  return isPositionEqual(range.start, range.end);
+    return isPositionEqual(range.start, range.end);
 }
 
 export function isRangeStartAfterEnd(range: Range): boolean {
-  return (
-    range.end.line < range.start.line ||
-    (range.end.line === range.start.line &&
-      range.end.character < range.start.character)
-  );
+    return (
+        range.end.line < range.start.line ||
+        (range.end.line === range.start.line && range.end.character < range.start.character)
+    );
 }
 
 export function swapRangeStartEndIfNecessary(range: Range): Range {
-  if (isRangeStartAfterEnd(range)) {
-    const start = range.start;
-    range.start = range.end;
-    range.end = start;
-  }
-  return range;
+    if (isRangeStartAfterEnd(range)) {
+        const start = range.start;
+        range.start = range.end;
+        range.end = start;
+    }
+    return range;
 }
 
 export function moveRangeStartToEndIfNecessary(range: Range): Range {
-  if (isRangeStartAfterEnd(range)) {
-    range.start = range.end;
-  }
-  return range;
+    if (isRangeStartAfterEnd(range)) {
+        range.start = range.end;
+    }
+    return range;
 }
 
-export function isBeforeOrEqualToPosition(
-  position: Position,
-  positionToTest: Position
-): boolean {
-  return (
-    positionToTest.line < position.line ||
-    (positionToTest.line === position.line &&
-      positionToTest.character <= position.character)
-  );
+export function isBeforeOrEqualToPosition(position: Position, positionToTest: Position): boolean {
+    return (
+        positionToTest.line < position.line ||
+        (positionToTest.line === position.line && positionToTest.character <= position.character)
+    );
 }
 
-export function isPositionEqual(
-  position1: Position,
-  position2: Position
-): boolean {
-  return (
-    position1.line === position2.line &&
-    position1.character === position2.character
-  );
+export function isPositionEqual(position1: Position, position2: Position): boolean {
+    return position1.line === position2.line && position1.character === position2.character;
 }
 
 export function isNotNullOrUndefined<T>(val: T | undefined | null): val is T {
-  return val !== undefined && val !== null;
+    return val !== undefined && val !== null;
 }
 
 /**
@@ -149,24 +138,24 @@ export function isNotNullOrUndefined<T>(val: T | undefined | null): val is T {
  * @param miliseconds Number of miliseconds to debounce
  */
 export function debounceSameArg<T>(
-  fn: (arg: T) => void,
-  shouldCancelPrevious: (newArg: T, prevArg?: T) => boolean,
-  miliseconds: number
+    fn: (arg: T) => void,
+    shouldCancelPrevious: (newArg: T, prevArg?: T) => boolean,
+    miliseconds: number
 ): (arg: T) => void {
-  let timeout: any;
-  let prevArg: T | undefined;
+    let timeout: any;
+    let prevArg: T | undefined;
 
-  return (arg: T) => {
-    if (shouldCancelPrevious(arg, prevArg)) {
-      clearTimeout(timeout);
-    }
+    return (arg: T) => {
+        if (shouldCancelPrevious(arg, prevArg)) {
+            clearTimeout(timeout);
+        }
 
-    prevArg = arg;
-    timeout = setTimeout(() => {
-      fn(arg);
-      prevArg = undefined;
-    }, miliseconds);
-  };
+        prevArg = arg;
+        timeout = setTimeout(() => {
+            fn(arg);
+            prevArg = undefined;
+        }, miliseconds);
+    };
 }
 
 /**
@@ -177,112 +166,107 @@ export function debounceSameArg<T>(
  * @param fn The function
  * @param miliseconds Number of miliseconds to debounce/throttle
  */
-export function debounceThrottle(
-  fn: () => void,
-  miliseconds: number
-): () => void {
-  let timeout: any;
-  let lastInvocation = Date.now() - miliseconds;
+export function debounceThrottle(fn: () => void, miliseconds: number): () => void {
+    let timeout: any;
+    let lastInvocation = Date.now() - miliseconds;
 
-  function maybeCall() {
-    clearTimeout(timeout);
+    function maybeCall() {
+        clearTimeout(timeout);
 
-    timeout = setTimeout(() => {
-      if (Date.now() - lastInvocation < miliseconds) {
-        maybeCall();
-        return;
-      }
+        timeout = setTimeout(() => {
+            if (Date.now() - lastInvocation < miliseconds) {
+                maybeCall();
+                return;
+            }
 
-      fn();
-      lastInvocation = Date.now();
-    }, miliseconds);
-  }
+            fn();
+            lastInvocation = Date.now();
+        }, miliseconds);
+    }
 
-  return maybeCall;
+    return maybeCall;
 }
 
 /**
  * Like str.lastIndexOf, but for regular expressions. Note that you need to provide the g-flag to your RegExp!
  */
 export function regexLastIndexOf(text: string, regex: RegExp, endPos?: number) {
-  if (endPos === undefined) {
-    endPos = text.length;
-  } else if (endPos < 0) {
-    endPos = 0;
-  }
+    if (endPos === undefined) {
+        endPos = text.length;
+    } else if (endPos < 0) {
+        endPos = 0;
+    }
 
-  const stringToWorkWith = text.substring(0, endPos + 1);
-  let lastIndexOf = -1;
-  let result: RegExpExecArray | null = null;
-  while ((result = regex.exec(stringToWorkWith)) !== null) {
-    lastIndexOf = result.index;
-  }
-  return lastIndexOf;
+    const stringToWorkWith = text.substring(0, endPos + 1);
+    let lastIndexOf = -1;
+    let result: RegExpExecArray | null = null;
+    while ((result = regex.exec(stringToWorkWith)) !== null) {
+        lastIndexOf = result.index;
+    }
+    return lastIndexOf;
 }
 
 /**
  * Like str.indexOf, but for regular expressions.
  */
 export function regexIndexOf(text: string, regex: RegExp, startPos?: number) {
-  if (startPos === undefined || startPos < 0) {
-    startPos = 0;
-  }
+    if (startPos === undefined || startPos < 0) {
+        startPos = 0;
+    }
 
-  const stringToWorkWith = text.substring(startPos);
-  const result: RegExpExecArray | null = regex.exec(stringToWorkWith);
-  return result?.index ?? -1;
+    const stringToWorkWith = text.substring(startPos);
+    const result: RegExpExecArray | null = regex.exec(stringToWorkWith);
+    return result?.index ?? -1;
 }
 
 /**
  * Get all matches of a regexp.
  */
 export function getRegExpMatches(regex: RegExp, str: string) {
-  const matches: RegExpExecArray[] = [];
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(str))) {
-    matches.push(match);
-  }
-  return matches;
+    const matches: RegExpExecArray[] = [];
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(str))) {
+        matches.push(match);
+    }
+    return matches;
 }
 
 /**
  * Function to modify each line of a text, preserving the line break style (`\n` or `\r\n`)
  */
 export function modifyLines(
-  text: string,
-  replacementFn: (line: string, lineIdx: number) => string
+    text: string,
+    replacementFn: (line: string, lineIdx: number) => string
 ): string {
-  let idx = 0;
-  return text
-    .split("\r\n")
-    .map((l1) =>
-      l1
-        .split("\n")
-        .map((line) => replacementFn(line, idx++))
-        .join("\n")
-    )
-    .join("\r\n");
+    let idx = 0;
+    return text
+        .split('\r\n')
+        .map((l1) =>
+            l1
+                .split('\n')
+                .map((line) => replacementFn(line, idx++))
+                .join('\n')
+        )
+        .join('\r\n');
 }
 
 /**
  * Like array.filter, but asynchronous
  */
 export async function filterAsync<T>(
-  array: T[],
-  predicate: (t: T, idx: number) => Promise<boolean>
+    array: T[],
+    predicate: (t: T, idx: number) => Promise<boolean>
 ): Promise<T[]> {
-  const fail = Symbol();
-  return (
-    await Promise.all(
-      array.map(async (item, idx) =>
-        (await predicate(item, idx)) ? item : fail
-      )
-    )
-  ).filter((i) => i !== fail) as T[];
+    const fail = Symbol();
+    return (
+        await Promise.all(
+            array.map(async (item, idx) => ((await predicate(item, idx)) ? item : fail))
+        )
+    ).filter((i) => i !== fail) as T[];
 }
 
 export function getIndent(text: string) {
-  return /^[ |\t]+/.exec(text)?.[0] ?? "";
+    return /^[ |\t]+/.exec(text)?.[0] ?? '';
 }
 
 /**
@@ -297,18 +281,18 @@ export function getIndent(text: string) {
 export function possiblyComponent(node: Node): boolean;
 export function possiblyComponent(tagName: string): boolean;
 export function possiblyComponent(nodeOrTagName: Node | string): boolean {
-  return !!(
-    typeof nodeOrTagName === "object" ? nodeOrTagName.tag : nodeOrTagName
-  )?.[0].match(/[A-Z]/);
+    return !!(typeof nodeOrTagName === 'object' ? nodeOrTagName.tag : nodeOrTagName)?.[0].match(
+        /[A-Z]/
+    );
 }
 
 /**
  * If the object if it has entries, else undefined
  */
 export function returnObjectIfHasKeys<T>(obj: T | undefined): T | undefined {
-  if (Object.keys(obj || {}).length > 0) {
-    return obj;
-  }
+    if (Object.keys(obj || {}).length > 0) {
+        return obj;
+    }
 }
 
 const fileNameLowerCaseRegExp = /[^\u0130\u0131\u00DFa-z0-9\\/:\-_\. ]+/g;
@@ -318,13 +302,11 @@ const fileNameLowerCaseRegExp = /[^\u0130\u0131\u00DFa-z0-9\\/:\-_\. ]+/g;
  * see the comment there about why we can't just use String.prototype.toLowerCase() here
  */
 export function toFileNameLowerCase(x: string) {
-  return fileNameLowerCaseRegExp.test(x)
-    ? x.replace(fileNameLowerCaseRegExp, toLowerCase)
-    : x;
+    return fileNameLowerCaseRegExp.test(x) ? x.replace(fileNameLowerCaseRegExp, toLowerCase) : x;
 }
 
 function toLowerCase(x: string) {
-  return x.toLowerCase();
+    return x.toLowerCase();
 }
 
 export type GetCanonicalFileName = (fileName: string) => string;
@@ -332,30 +314,30 @@ export type GetCanonicalFileName = (fileName: string) => string;
  * adopted from https://github.com/microsoft/TypeScript/blob/8192d550496d884263e292488e325ae96893dc78/src/compiler/core.ts#L2312
  */
 export function createGetCanonicalFileName(
-  useCaseSensitiveFileNames: boolean
+    useCaseSensitiveFileNames: boolean
 ): GetCanonicalFileName {
-  return useCaseSensitiveFileNames ? identity : toFileNameLowerCase;
+    return useCaseSensitiveFileNames ? identity : toFileNameLowerCase;
 }
 
 function identity<T>(x: T) {
-  return x;
+    return x;
 }
 
 export function memoize<T>(callback: () => T): () => T {
-  let value: T;
-  let callbackInner: typeof callback | undefined = callback;
+    let value: T;
+    let callbackInner: typeof callback | undefined = callback;
 
-  return () => {
-    if (callbackInner) {
-      value = callback();
-      callbackInner = undefined;
-    }
-    return value;
-  };
+    return () => {
+        if (callbackInner) {
+            value = callback();
+            callbackInner = undefined;
+        }
+        return value;
+    };
 }
 
 export function removeLineWithString(str: string, keyword: string) {
-  const lines = str.split("\n");
-  const filteredLines = lines.filter((line) => !line.includes(keyword));
-  return filteredLines.join("\n");
+    const lines = str.split('\n');
+    const filteredLines = lines.filter((line) => !line.includes(keyword));
+    return filteredLines.join('\n');
 }
