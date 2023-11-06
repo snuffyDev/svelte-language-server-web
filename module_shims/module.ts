@@ -1,6 +1,6 @@
 export default {
-	createRequire,
+  createRequire,
 };
 export function createRequire(...args: any[]) {
-	return require(args);
+  return require.apply(require, args);
 }

@@ -1,5 +1,5 @@
 import { basicSetup } from "codemirror";
-import { EditorView, keymap } from "@codemirror/view";
+import { EditorView, keymap, ViewUpdate } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
 import { vscodeKeymap } from "@replit/codemirror-vscode-keymap";
 import { svelte } from "@replit/codemirror-lang-svelte";
@@ -51,14 +51,12 @@ const setupLanguageServers = async (files: Files) => {
     autoClose: false,
     languageId: "typescript",
   });
-
+  
   await Promise.all([
     svelteLanguageServer.fetchTypes(JSON.parse(files["file:///package.json"])),
-    tsLanguageServer.fetchTypes(JSON.parse(files["file:///package.json"])),
-    tsLanguageServer.addFiles(files),
-    svelteLanguageServer.addFiles(files),
   ]);
-  await tsLanguageServer.setup(files);
+  await svelteLanguageServer.addFiles(files),
+    await tsLanguageServer.setup(files);
   await svelteLanguageServer.setup(files);
 
   return { svelteLanguageServer, tsLanguageServer };
@@ -72,6 +70,20 @@ export const setupEditor = async (init: InitOptions) => {
   const { svelteLanguageServer, tsLanguageServer } = await setupLanguageServers(
     init.files
   );
+
+  const watcher = EditorView.updateListener.of((update: ViewUpdate) => {
+    console.log({
+      t: ![".svelte", ".ts", ".js"].some((ext) => currentTab.endsWith(ext)),
+      currentTab,
+    });
+    if (![".svelte", ".ts", ".js"].some((ext) => currentTab.endsWith(ext))) {
+      const newFiles = {
+        [currentTab]: update.state.doc.toString(),
+      };
+      svelteLanguageServer.addFiles(newFiles);
+      tsLanguageServer.addFiles(newFiles);
+    }
+  });
 
   const createEditorState = (uri: string, code: string) => {
     return EditorState.create({
@@ -110,7 +122,7 @@ export const setupEditor = async (init: InitOptions) => {
   const editor = new EditorView({
     state: createEditorState(init.document_uri, init.code),
     parent: document.getElementById("editor")!,
-    extensions: [],
+    extensions: [keymap.of(vscodeKeymap), watcher],
   });
 
   const setCurrentTab = (editor: EditorView, uri: string) => {

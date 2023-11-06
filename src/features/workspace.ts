@@ -29,8 +29,8 @@ function removeDuplicateFiles(files: File[]): File[] {
   return Array.from(fileMap.values());
 }
 
-export const syncFiles = batchUpdates<File>(
-  (files) => {
+export const syncFiles = batchUpdates<File[]>(
+  (...files) => {
     BC.postMessage(removeDuplicateFiles(files));
   },
   50,
@@ -40,8 +40,9 @@ export const syncFiles = batchUpdates<File>(
 export const handleFSSync = (
   callback: (fileName: string, contents: string) => void
 ) => {
-  const cb = batchUpdates<File>((...data) => {
-    for (const file of data[0]) {
+  const cb = batchUpdates<File[]>((...data) => {
+    console.log({ data });
+    for (const file of data) {
       for (const [name, contents] of file) {
         VFS.writeFile(name, contents);
         callback(VFS.normalize(name), contents);

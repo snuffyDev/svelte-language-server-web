@@ -27,7 +27,7 @@ export function debounce<T extends (...args: any[]) => any>(
  */
 
 export function batchUpdates<T>(
-  callback: (...args: T extends [...args: any[]] ? T[][] : T[]) => void,
+  callback: (...args: T extends any[] ? T : T[]) => void,
   maxItems = 500,
   wait = 500
 ) {
@@ -41,7 +41,7 @@ export function batchUpdates<T>(
       ? [...args: T[]]
       : [T]
   ) {
-    items.push.apply(items, [args] as T[]);
+    items.push.apply(items, args as T[]);
     if (items.length >= maxItems) {
       clearTimeout(timer);
       // @ts-ignore
@@ -145,3 +145,44 @@ export function throttleAsync<T extends (...args: any[]) => Promise<any>>(
     });
   };
 }
+
+export const promisePool = <T, R>(
+  fn: (...args: T[]) => Promise<R>,
+  maxConcurrency: number
+) => {
+  const queue: [args: T[], (...args: T[]) => Promise<void>][] = [];
+  let active = 0;
+
+  const run = async () => {
+    if (active >= maxConcurrency) return;
+    if (queue.length === 0) return;
+
+    active++;
+    const [args, fn] = queue.shift()!;
+    try {
+      await fn(...args);
+    } finally {
+      active--;
+      run();
+    }
+  };
+
+  return {
+    add: (...args: T[]) => {
+      return new Promise<R>((resolve, reject) => {
+        queue.push([
+          args,
+          async (...args: T[]) => {
+            try {
+              resolve(await fn(...args));
+            } catch (e) {
+              reject(e);
+            }
+          },
+        ]);
+        run();
+      });
+    },
+    pending: () => queue.length,
+  };
+};

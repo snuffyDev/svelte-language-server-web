@@ -27,7 +27,7 @@ export default class PostMessageWorkerTransport extends Transport {
   public connect(): Promise<void> {
     return new Promise(async (resolve, reject) => {
       this.worker!.addEventListener("message", this.messageHandler);
-      resolve();
+      queueMicrotask(() => resolve());
     });
   }
 

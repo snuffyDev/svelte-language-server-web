@@ -69,6 +69,7 @@ export class WorkerRPC extends PostMessageWorkerTransport {
   private rpcQueue: Map<number, (value: boolean) => void> = new Map();
   private langClient!: LanguageServerClient;
   private worker!: Worker;
+  private port!: MessagePort;
 
   /**
    * Creates the language Worker from the provided URL.
@@ -105,6 +106,7 @@ export class WorkerRPC extends PostMessageWorkerTransport {
       | Omit<LanguageServerOptions, "transport">
   ) {
     let _worker: Worker;
+    const { port1: sender, port2: workerPort } = new MessageChannel();
 
     switch (typeof worker) {
       case "string":
@@ -125,10 +127,15 @@ export class WorkerRPC extends PostMessageWorkerTransport {
         );
       }
     }
+    _worker.postMessage({ port: workerPort }, [workerPort]);
+
     super(_worker);
 
-    this.onMessage = this.onMessage.bind(this);
-    this.worker.addEventListener("message", this.onMessage);
+    this.port = sender;
+    this.port.onmessage = (e) => {
+      this.onMessage(e);
+    };
+    this.port.start();
 
     this.worker.onerror = (e) => {
       console.error(e);
@@ -154,6 +161,7 @@ export class WorkerRPC extends PostMessageWorkerTransport {
 
   dispose() {
     this.worker.removeEventListener("message", this.onMessage);
+    this.port.onmessage = null;
     this.worker.terminate();
 
     this.rpcQueue.clear();
@@ -244,7 +252,7 @@ export class WorkerRPC extends PostMessageWorkerTransport {
     return new Promise<boolean>((resolve, reject) => {
       const id = this.internalMessageId++;
       this.rpcQueue.set(id, resolve);
-      this.worker.postMessage({
+      this.port.postMessage({
         id,
         method: "@@delete-file",
         params: { fileName },
@@ -286,7 +294,7 @@ export class WorkerRPC extends PostMessageWorkerTransport {
     const promise = new Promise<boolean>((resolve, reject) => {
       const id = this.internalMessageId++;
       this.rpcQueue.set(id, resolve);
-      this.worker.postMessage({
+      this.port.postMessage({
         params: files,
         id,
         method: "@@add-files",
@@ -299,7 +307,7 @@ export class WorkerRPC extends PostMessageWorkerTransport {
     return new Promise<boolean>((resolve, reject) => {
       const id = this.internalMessageId++;
       this.rpcQueue.set(id, resolve);
-      this.worker.postMessage({
+      this.port.postMessage({
         id,
         method: "@@fetch-types",
         params: files,
@@ -311,7 +319,7 @@ export class WorkerRPC extends PostMessageWorkerTransport {
     const promise = new Promise<boolean>((resolve, reject) => {
       const id = this.internalMessageId++;
       this.rpcQueue.set(id, resolve);
-      this.worker.postMessage({
+      this.port.postMessage({
         params: configFiles,
         id,
         method: "@@setup",

@@ -56,7 +56,7 @@ import { basename, dirname, join } from "path";
 import { FileType } from "vscode-html-languageservice";
 import { URI } from "vscode-uri";
 import { getSemanticTokenLegends } from "./lib/semanticTokenLegend";
-import { debounceSameArg, debounceThrottle } from "./utils";
+import { debounceSameArg, debounceThrottle, filterNullishMap } from "./utils";
 import EventEmitter from "events/";
 
 export function scriptElementKindToCompletionItemKind(
@@ -425,16 +425,6 @@ export const createServer = ({ connection }: { connection: Connection }) => {
 
     let projectVersion = 0;
 
-    function getScriptSnapshot(fileName) {
-      var contents = VFS.readFile(fileName, "utf-8");
-
-      if (contents) {
-        return ts.ScriptSnapshot.fromString(contents.toString());
-      }
-
-      return;
-    }
-
     const getCompilerOptions = () => {
       return ts.parseJsonConfigFileContent(
         ts.readConfigFile("/tsconfig.json", ts.sys.readFile).config,
@@ -474,10 +464,22 @@ export const createServer = ({ connection }: { connection: Connection }) => {
       compilerOptions
     );
 
-    const scriptFileNameCache = () => {
-      const __cache = new Cache<string[]>(10);
-      const getScriptFileNames = () => {};
+    const projectFileSnapshots = new Map<string, ts.IScriptSnapshot>();
+
+    const getScriptSnapshot = (fileName: string) => {
+      if (!projectFileSnapshots.has(fileName)) {
+        const contents = VFS.readFile(fileName, "utf-8");
+        if (contents) {
+          projectFileSnapshots.set(
+            fileName,
+            ts.ScriptSnapshot.fromString(contents.toString())
+          );
+        }
+      }
+
+      return projectFileSnapshots.get(fileName);
     };
+
     // const originalEmit = compilerHost(compilerHost);
     const host: ts.LanguageServiceHost = {
       log: (message) => console.debug(`[ts] ${message}`),
@@ -485,9 +487,7 @@ export const createServer = ({ connection }: { connection: Connection }) => {
       getScriptFileNames() {
         return VFS.readDirectory("/", JS_TS_EXTS, ["node_modules"]);
       },
-      getCompilerHost() {
-        return compilerHost;
-      },
+
       writeFile: (filename, content) => {
         ts.sys.writeFile(filename, content, false);
         VFS.writeFile(filename, content);
@@ -499,7 +499,7 @@ export const createServer = ({ connection }: { connection: Connection }) => {
 
       getScriptSnapshot,
       getCurrentDirectory() {
-        return currentDir;
+        return "/";
       },
       getDefaultLibFileName: ts.getDefaultLibFilePath,
       fileExists: VFS.fileExists.bind(VFS),
@@ -511,12 +511,19 @@ export const createServer = ({ connection }: { connection: Connection }) => {
         includes?: readonly string[],
         depth?: number
       ): string[] {
-        return VFS.readDirectory(path, extensions, excludes, includes, depth);
+        console.log({ path, extensions, excludes, includes, depth });
+        return ts.sys.readDirectory(
+          path,
+          extensions,
+          excludes,
+          includes,
+          depth
+        );
       },
       getDirectories: (...args) => {
         return VFS.getDirectories(...args);
       },
-      useCaseSensitiveFileNames: () => ts.sys.useCaseSensitiveFileNames,
+      useCaseSensitiveFileNames: () => false,
       getScriptKind: function getSnapshot(fileName: string) {
         const ext = fileName.split(".").pop();
         switch (ext.toLowerCase()) {
@@ -551,9 +558,13 @@ export const createServer = ({ connection }: { connection: Connection }) => {
         content: string
       ) {
         fileVersions.set(fileName, (fileVersions.get(fileName) || 0) + 1);
+        if (projectFileSnapshots.has(fileName)) {
+          projectFileSnapshots.delete(fileName);
+        }
+
         VFS.writeFile(fileName, content);
         ts.sys.writeFile(fileName, content, false);
-        compilerHost.writeFile(fileName, content, false);
+
         projectVersion++;
       },
       createFile: function (
@@ -669,15 +680,14 @@ export const createServer = ({ connection }: { connection: Connection }) => {
       }
 
       const list = {
-        items: result.entries
-          .filter((v) => v !== null && v !== undefined)
-          .map((entry) => {
-            return {
-              ...entry,
-              label: entry.name,
-              kind: scriptElementKindToCompletionItemKind(entry.kind),
-            };
-          }),
+        items: filterNullishMap(result.entries, (entry) => {
+          if (!entry) return null;
+          return {
+            ...entry,
+            label: entry.name,
+            kind: scriptElementKindToCompletionItemKind(entry.kind),
+          };
+        }),
         isIncomplete: result.isIncomplete,
       };
 

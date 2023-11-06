@@ -23,7 +23,7 @@ import {
 addEventListener("messageerror", (e) => console.debug(Error(`${e}`)));
 addEventListener("error", (e) => console.debug(Error(`${e}`)));
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let server: () => void;
 
@@ -33,6 +33,7 @@ export const BaseWorker = (
   name: string
 ) => {
   const setupQueue = [];
+  let port: MessagePort;
 
   const isRPCMessage = (
     data: unknown
@@ -47,6 +48,8 @@ export const BaseWorker = (
     workerRPCMethods.includes(data.method as never);
 
   const handleRestartLS = async ({ textDocument: { uri: fileName } }) => {
+    console.log({ fileName });
+    console.log(`Restarting ${name} Language Server...`);
     if (
       server &&
       fileName.includes("node_modules") === false &&
@@ -56,7 +59,6 @@ export const BaseWorker = (
     ) {
       server();
 
-      await tick();
       connection = createConnection(
         new BrowserMessageReader(
           globalThis as unknown as DedicatedWorkerGlobalScope
@@ -72,7 +74,18 @@ export const BaseWorker = (
     }
   };
 
-  connection.onDidChangeTextDocument(handleRestartLS);
+  const originalOnDidChangeTextDocument =
+    connection.onDidChangeTextDocument.bind(connection);
+
+  connection.onDidChangeTextDocument = (handler) => {
+    const wrappedHandler: (...params: Parameters<typeof handler>) => void = (
+      ...params
+    ) => {
+      handler(...params);
+      handleRestartLS(...params);
+    };
+    return originalOnDidChangeTextDocument(wrappedHandler);
+  };
   try {
     console.log(`${name} Language Server running. Waiting for setup message.`);
 
@@ -138,16 +151,19 @@ export const BaseWorker = (
       }
     });
 
-    addEventListener("message", async (event) => {
+    const onMessage = async (event: MessageEvent<any>) => {
       if (event.ports.length) {
+        port = event.ports[0];
+        port.onmessage = onMessage;
+        return;
       }
 
       // Process our custom RPC messages
       if (isRPCMessage(event.data)) {
         if (event.data.method === "@@fetch-types") {
-          handleFetchTypes(event.data).catch(console.error);
-          await tick();
-          postMessage({
+          await handleFetchTypes(event.data).catch(console.error);
+          await sleep(100);
+          port.postMessage({
             method: "@@fetch-types",
             id: event.data.id,
             complete: true,
@@ -158,40 +174,56 @@ export const BaseWorker = (
         if (event.data.method === "@@delete-file") {
           VFS.unlink(event.data.params.fileName);
 
-          postMessage({
+          port.postMessage({
             method: "@@delete-file",
             id: event.data.id,
             complete: true,
           } as WorkerResponse<"@@delete-file">);
           return;
         }
-        await updateVFS(event.data.params);
+
+        updateVFS(event.data.params);
+
         if (event.data.method === "@@setup") {
           console.log(`Setting up ${name} Language Server...`);
           server = createServer({ connection: connection });
-          postMessage({
+          await sleep(100);
+          port.postMessage({
             method: "@@setup",
             id: event.data.id,
             complete: true,
           } as WorkerResponse<"@@setup">);
         } else {
-          postMessage({
+          await sleep(100);
+          port.postMessage({
             method: "@@add-files",
             id: event.data.id,
             complete: true,
           } as WorkerResponse<"@@add-files">);
         }
       }
-    });
+    };
+    addEventListener("message", onMessage);
 
-    async function updateVFS(params: Record<string, string>) {
+    function updateVFS(params: Record<string, string>) {
       const fileNames = Object.keys(params).sort((a, b) => b.length - a.length);
+      let willRestart = false;
+
       for (let i = 0; i < fileNames.length - 1; i++) {
         const fileName = fileNames[i];
         const fileContents = params[fileName];
 
         VFS.writeFile(fileName, fileContents);
         syncFiles(VFS.normalize(fileName), fileContents);
+
+        if (
+          fileName.includes("node_modules") === false &&
+          (fileName.includes("package.json") ||
+            fileName.includes("tsconfig.json") ||
+            fileName.includes("jsconfig.json"))
+        ) {
+          willRestart = true;
+        }
       }
     }
   } catch (e) {

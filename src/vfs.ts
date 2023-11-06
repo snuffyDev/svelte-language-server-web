@@ -16,6 +16,7 @@ import _path from "./deps/path-deno";
 import json from "./libs.json";
 import { addKitToDefaultExport, extractKitProperty } from "./vfs.utils";
 import svelteTypes from "./svelte-types.json";
+import { batchUpdates } from "./utils";
 
 const SVELTEKIT_CONFIG_ADAPTER_REGEX = /adapter: .[\w\(\{\}\)\,]+?(\n|\t)/gm;
 
@@ -24,7 +25,7 @@ type EventListener = (
   filename: string | Buffer
 ) => void;
 
-enum FileType {
+export enum FileType {
   File,
   Directory,
   SymbolicLink,
@@ -186,6 +187,11 @@ class VFSImpl extends EventEmitter.EventEmitter {
     return files;
   }
 
+  public readFileRaw(path: string) {
+    const normalizedPath = this.normalize(path);
+    return sys.get(normalizedPath);
+  }
+
   public readDirectory(
     path: string,
     extensions?: readonly string[],
@@ -195,9 +201,10 @@ class VFSImpl extends EventEmitter.EventEmitter {
   ) {
     const normalizedPath = this.normalize(path);
 
-    let files = [...sys.keys()].filter((file) =>
-      file.startsWith(this.normalize(path))
-    );
+    let files = [...sys.keys()].filter((file) => {
+      if (path === "/") return true;
+      file.startsWith(this.normalize(path));
+    });
 
     if (extensions) {
       files = files.filter((file) =>
@@ -262,8 +269,10 @@ class VFSImpl extends EventEmitter.EventEmitter {
       throw new Error(`Target ${normalizedTarget} does not exist`);
     }
 
-    // @ts-expect-error it's fine
-    sys.set(normalizedPath, normalizedTarget);
+    sys.set(normalizedPath, {
+      content: normalizedTarget,
+      type: FileType.SymbolicLink,
+    });
     this.symlinkMap.set(normalizedPath, normalizedTarget);
   }
 
@@ -282,32 +291,43 @@ class VFSImpl extends EventEmitter.EventEmitter {
     return this.output.push(s);
   }
 
-  public writeFile(path: string, data: string, writeByteOrderMark?: boolean) {
-    const normalizedPath = this.normalize(path);
-    this.createDirectory(_path.posix.dirname(normalizedPath));
-    try {
-      if (normalizedPath.includes("svelte.config.")) {
-        const kit = extractKitProperty(data);
+  public writeFile = batchUpdates<
+    [path: string, data: string, writeByteOrderMark?: boolean][]
+  >(
+    (...args) => {
+      for (const [path, data] of args) {
+        const normalizedPath = this.normalize(path);
+        this.createDirectory(_path.posix.dirname(normalizedPath));
+        try {
+          if (normalizedPath.includes("svelte.config.")) {
+            const kit = extractKitProperty(data);
 
-        if (kit) {
-          const baseModule = getBaseSvelteConfig();
-          const newConfig = addKitToDefaultExport(baseModule, kit).replace(
-            SVELTEKIT_CONFIG_ADAPTER_REGEX,
-            "adapter:()=> {}"
-          );
+            if (kit) {
+              const baseModule = getBaseSvelteConfig();
+              const newConfig = addKitToDefaultExport(baseModule, kit).replace(
+                SVELTEKIT_CONFIG_ADAPTER_REGEX,
+                "adapter:()=> {}"
+              );
+
+              return sys.set(normalizedPath, {
+                content: newConfig,
+                type: FileType.File,
+              });
+            }
+          }
 
           return sys.set(normalizedPath, {
-            content: newConfig,
+            content: data,
             type: FileType.File,
           });
+        } finally {
+          this.emit("change", "change", this.normalize(path));
         }
       }
-
-      return sys.set(normalizedPath, { content: data, type: FileType.File });
-    } finally {
-      this.emit("change", "change", this.normalize(path));
-    }
-  }
+    },
+    1,
+    1
+  );
 }
 
 /* VFS with in-memory file watching methods */

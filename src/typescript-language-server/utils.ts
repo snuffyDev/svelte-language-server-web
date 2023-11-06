@@ -60,3 +60,19 @@ export function debounceThrottle<T>(
 
   return maybeCall;
 }
+
+export function filterNullishMap<T, R>(
+  arr: T[],
+  fn: (item: T, index: number, arr: T[]) => R | null | undefined
+): R[] {
+  const result: R[] = [];
+
+  for (let i = 0; i < arr.length; i++) {
+    const item = fn(arr[i], i, arr);
+    if (item !== null && item !== undefined) {
+      result.push(item);
+    }
+  }
+
+  return result;
+}
