@@ -36,7 +36,7 @@ Creating the Svelte Language Server worker:
 
 ```ts
 // /worker.ts
-import { SvelteLanguageWorker } from "svelte-language-server-web/worker";
+import { SvelteLanguageWorker } from "svelte-language-server-web/svelteWorker";
 
 export default SvelteLanguageWorker();
 ```
