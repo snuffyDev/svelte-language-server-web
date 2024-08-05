@@ -1,0 +1,41 @@
+{
+	"name": "vite-monaco-ts",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": {
+		"dev": "vite",
+		"build": "node --max_old_space_size=16384 ./node_modules/vite/bin/vite.js build",
+		"preview": "vite preview"
+	},
+	"devDependencies": {
+		"monaco-languageclient": "^8.7.0",
+		"svelte-language-server-web": "^0.0.8",
+		"typescript": "^5.2.2",
+		"vite": "^5.3.4"
+	},
+	"dependencies": {
+		"@codingame/monaco-vscode-configuration-service-override": "~7.0.7",
+		"@codingame/monaco-vscode-files-service-override": "~7.0.7",
+		"@codingame/monaco-vscode-groovy-default-extension": "~7.0.7",
+		"@codingame/monaco-vscode-java-default-extension": "~7.0.7",
+		"@codingame/monaco-vscode-javascript-default-extension": "~7.0.7",
+		"@codingame/monaco-vscode-json-default-extension": "~7.0.7",
+		"@codingame/monaco-vscode-keybindings-service-override": "~7.0.7",
+		"@codingame/monaco-vscode-lifecycle-service-override": "~7.0.7",
+		"@codingame/monaco-vscode-localization-service-override": "~7.0.7",
+		"@codingame/monaco-vscode-python-default-extension": "~7.0.7",
+		"@codingame/monaco-vscode-standalone-json-language-features": "~7.0.7",
+		"@codingame/monaco-vscode-standalone-languages": "~7.0.7",
+		"@codingame/monaco-vscode-standalone-typescript-language-features": "~7.0.7",
+		"@codingame/monaco-vscode-textmate-service-override": "~7.0.7",
+		"@codingame/monaco-vscode-theme-defaults-default-extension": "~7.0.7",
+		"@codingame/monaco-vscode-theme-service-override": "~7.0.7",
+		"@codingame/monaco-vscode-typescript-basics-default-extension": "~7.0.7",
+		"@codingame/monaco-vscode-typescript-language-features-default-extension": "~7.0.7",
+		"monaco-editor": "npm:@codingame/monaco-vscode-editor-api@~7.0.7",
+		"monaco-editor-wrapper": "^5.4.0",
+		"vercel": "^35.2.3",
+		"vscode-jsonrpc": "^8.2.1"
+	}
+}
