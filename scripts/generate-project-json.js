@@ -1,5 +1,6 @@
 import glob from 'fast-glob';
 import { readFileSync, writeFileSync } from 'fs';
+import { unescape } from 'querystring';
 
 const outfile = "./project.json";
 
@@ -15,7 +16,7 @@ const projectFiles = project.reduce((acc, file) => {
     const content = readFileSync(file, { encoding: 'utf-8' });
     const publicPath = file.slice(file.indexOf('/template/') + 9);
 
-    acc[publicPath] = escape(content.replace(/"/g, '\"'));
+    acc[publicPath] = unescape(content.replace(/"/g, '\"'));
     return acc;
 }, {});
 
